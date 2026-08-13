@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <title>TrainForge 3D</title>
   <style>
     :root{
@@ -11,7 +11,7 @@
     }
     html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",Tahoma,sans-serif;background:#cfe0ef;color:var(--ink)}
     #app{position:relative;width:100%;height:100%}
-    #view{position:absolute;inset:0;width:100%;height:100%;display:block}
+    #view{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
     #panel{
       position:absolute;left:12px;top:12px;bottom:12px;width:332px;
       display:flex;flex-direction:column;overflow:hidden;
@@ -78,6 +78,47 @@
       opacity:0;transition:opacity .14s
     }
     #status.show{opacity:1}
+    #mobileQuick{display:none}
+    @media (max-width:700px){
+      html,body,#app{height:100%;height:100dvh}
+      #panel{
+        left:8px;right:8px;top:auto;bottom:max(8px,env(safe-area-inset-bottom));width:auto;
+        max-height:min(48dvh,440px);border-radius:16px
+      }
+      #panel.collapsed{width:auto;max-height:54px;left:8px;right:8px}
+      #head{min-height:44px;padding:5px 7px 5px 12px}
+      #head b{font-size:14px}
+      #body{padding:8px;gap:7px;overscroll-behavior:contain;touch-action:pan-y}
+      .sec{padding:8px}
+      .sec h4{font-size:11px}
+      button,select,input{font-size:14px;min-height:42px;padding:8px 9px;touch-action:manipulation}
+      input[type="range"]{min-height:32px}
+      #trackPieces{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      #terrainTypes,#treeTypes,#animalTypes{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      #trainColors{gap:8px}
+      .sw{min-height:36px}
+      .meta{font-size:12px;line-height:1.35}
+      #hud{
+        left:8px;right:8px;top:max(8px,env(safe-area-inset-top));transform:none;
+        justify-content:center;gap:7px;padding:5px 7px;font-size:10px;white-space:nowrap
+      }
+      #hBlocks,#hTrees,#hAnimals{display:none}
+      #lockWrap{right:8px;top:48px}
+      #status{left:8px;right:8px;top:48px;bottom:auto;transform:none;text-align:center;font-size:13px}
+      #panel.collapsed ~ #mobileQuick{
+        display:flex;position:absolute;left:8px;right:8px;bottom:calc(70px + env(safe-area-inset-bottom));
+        gap:6px;padding:6px;border:1px solid var(--line);border-radius:14px;
+        background:rgba(247,251,255,.96);box-shadow:0 8px 22px rgba(5,18,30,.22)
+      }
+      #mobileQuick button{flex:1;min-width:0;min-height:46px;padding:6px 4px;font-size:12px}
+      #mobileQuick button.active{background:#d9ebfb;border-color:#78a5cb;font-weight:600}
+    }
+    @media (max-width:900px) and (orientation:landscape) and (max-height:500px){
+      #panel{left:8px;right:auto;top:8px;bottom:8px;width:min(42vw,360px);max-height:none}
+      #panel.collapsed{left:8px;right:auto;width:150px;max-height:54px}
+      #panel.collapsed ~ #mobileQuick{left:166px;right:8px;bottom:8px}
+      #hud{left:auto;right:8px;width:auto}
+    }
   </style>
   <script type="importmap">
     {
@@ -161,9 +202,16 @@
         <div class="sec">
           <h4>Base Plane</h4>
           <div class="row"><select id="boardSize" class="fill"><option value="20">20 x 20</option><option value="30" selected>30 x 30</option><option value="40">40 x 40</option><option value="50">50 x 50</option></select><button id="applyBoard">Apply</button></div>
-          <div class="meta">Hold V (or right mouse drag) to temporarily enter camera view while placing.</div>
+          <div class="meta">Desktop: hold V or right-drag for the camera. Phone: choose View, then drag to rotate or pinch to zoom. Return to Track and tap a tile to place.</div>
         </div>
       </div>
+    </div>
+    <div id="mobileQuick" aria-label="Quick build controls">
+      <button id="mobileTrack" class="active">Track</button>
+      <button id="mobileRotL" aria-label="Rotate track left">Rotate ↶</button>
+      <button id="mobileRotR" aria-label="Rotate track right">Rotate ↷</button>
+      <button id="mobileView">View</button>
+      <button id="mobileErase">Erase</button>
     </div>
     <div id="hud"><span id="hTracks">Tracks: 0</span><span id="hBlocks">Blocks: 0</span><span id="hTrees">Trees: 0</span><span id="hAnimals">Animals: 0</span><span id="hTrains">Trains: 0</span><span id="hMode">Mode: Place Track</span></div>
     <div id="lockWrap"><span class="linkIcon"></span><span id="lockLabel">1 interlock</span></div>
@@ -219,7 +267,7 @@
     class TrainForgeApp{
       constructor(){
         this.el = {};
-        ["view","panel","body","collapse","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
+        ["view","panel","body","collapse","mobileTrack","mobileRotL","mobileRotR","mobileView","mobileErase","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
           .forEach((id) => this.el[id] = document.getElementById(id));
         this.state = {board: 30, tool: "track", trackType: "straight", treeType: "pine", animalType: "cow", terrainType: "block", rot: 0, paused: false, style: "classic", carts: 2, color: TRAIN_COLORS[0].hex, speedScale: 1};
         this.pointer = {inside: false, ndc: new THREE.Vector2(), leftDown: null, rightDown: null};
@@ -256,6 +304,7 @@
         this._rebuildGhostAnimal();
         this._rebuildGhostTrain();
         this._bind();
+        this._syncPanelButton();
         this._setTool("track");
         this._updateHud();
         this._msg("Ready");
@@ -374,6 +423,7 @@
         this.el.view.addEventListener("pointerdown", (e) => this._onPointerDown(e));
         this.el.view.addEventListener("pointermove", (e) => this._onPointerMove(e));
         this.el.view.addEventListener("pointerup", (e) => this._onPointerUp(e));
+        this.el.view.addEventListener("pointercancel", () => this._cancelPointer());
         this.el.view.addEventListener("wheel", (e) => this._onWheelZoom(e), {passive: false});
         addEventListener("keydown", (e) => this._onKey(e));
         addEventListener("keyup", (e) => this._onKeyUp(e));
@@ -381,8 +431,13 @@
         this.el.collapse.onclick = () => {
           const collapsed = !this.el.panel.classList.contains("collapsed");
           this.el.panel.classList.toggle("collapsed", collapsed);
-          this.el.collapse.textContent = collapsed ? "Show" : "Hide";
+          this._syncPanelButton();
         };
+        this.el.mobileTrack.onclick = () => this._setTool("track");
+        this.el.mobileRotL.onclick = () => this._rotate(-1);
+        this.el.mobileRotR.onclick = () => this._rotate(1);
+        this.el.mobileView.onclick = () => this._setTool("view");
+        this.el.mobileErase.onclick = () => this._setTool("erase");
         this.el.toolTrack.onclick = () => this._setTool("track");
         this.el.toolTrain.onclick = () => this._setTool("train");
         this.el.toolTree.onclick = () => this._setTool("tree");
@@ -494,8 +549,20 @@
           this._msg(`Base plane set to ${n} x ${n}`);
         };
       }
+      _syncPanelButton(){
+        const collapsed = this.el.panel.classList.contains("collapsed");
+        const mobile = matchMedia("(max-width: 700px)").matches || (matchMedia("(max-width: 900px)").matches && matchMedia("(orientation: landscape)").matches);
+        this.el.collapse.textContent = collapsed ? (mobile ? "Open controls" : "Show") : (mobile ? "Minimize" : "Hide");
+      }
+      _cancelPointer(){
+        this.pointer.leftDown = null;
+        this.pointer.rightDown = null;
+        this._setRightView(false);
+      }
       _onPointerDown(e){
+        this.pointer.inside = true;
         this._setNdc(e.clientX, e.clientY);
+        this._refreshHover();
         if(e.button === 2){
           if(this.state.tool !== "view"){
             this.pointer.rightDown = {x: e.clientX, y: e.clientY, moved: false};
@@ -505,11 +572,14 @@
         }
         if(e.button !== 0) return;
         if(this.keyViewActive) return;
-        this.pointer.leftDown = {x: e.clientX, y: e.clientY, moved: false};
+        this.pointer.leftDown = {x: e.clientX, y: e.clientY, moved: false, pointerType: e.pointerType};
       }
       _onPointerMove(e){
         this._setNdc(e.clientX, e.clientY);
-        if(this.pointer.leftDown && Math.hypot(e.clientX - this.pointer.leftDown.x, e.clientY - this.pointer.leftDown.y) > 3) this.pointer.leftDown.moved = true;
+        if(this.pointer.leftDown){
+          const moveLimit = this.pointer.leftDown.pointerType === "touch" ? 12 : 3;
+          if(Math.hypot(e.clientX - this.pointer.leftDown.x, e.clientY - this.pointer.leftDown.y) > moveLimit) this.pointer.leftDown.moved = true;
+        }
         if(this.pointer.rightDown && Math.hypot(e.clientX - this.pointer.rightDown.x, e.clientY - this.pointer.rightDown.y) > 3) this.pointer.rightDown.moved = true;
         this._refreshHover();
       }
@@ -523,6 +593,8 @@
           return;
         }
         if(e.button !== 0) return;
+        this.pointer.inside = true;
+        this._refreshHover();
         const isClick = this.pointer.leftDown && !this.pointer.leftDown.moved;
         this.pointer.leftDown = null;
         if(isClick) this._handleClick();
@@ -620,6 +692,9 @@
         this.el.toolBlock.classList.toggle("active", tool === "block");
         this.el.toolErase.classList.toggle("active", tool === "erase");
         this.el.toolView.classList.toggle("active", tool === "view");
+        this.el.mobileTrack.classList.toggle("active", tool === "track");
+        this.el.mobileView.classList.toggle("active", tool === "view");
+        this.el.mobileErase.classList.toggle("active", tool === "erase");
         this._syncControlsEnabled();
         this._updatePieceLabel();
         this._refreshHover();
