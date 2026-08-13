@@ -138,6 +138,7 @@
           <h4>Tools</h4>
           <div class="row"><button id="toolTrack" class="active fill">Place Track</button><button id="toolTrain" class="fill">Place Train</button><button id="toolTree" class="fill treeBtn"><span class="iconTree"></span>Trees</button></div>
           <div class="row" style="margin-top:6px"><button id="toolAnimal" class="fill">Animals</button><button id="toolBlock" class="fill">Terrain</button><button id="toolErase" class="fill">Erase</button><button id="toolView" class="fill">View</button></div>
+          <div class="row" style="margin-top:6px"><button id="toolRotateTrack" class="fill">Rotate Placed Track</button></div>
           <div class="row" style="margin-top:6px"><button id="rotL" class="fill">Rotate Q</button><button id="rotR" class="fill">Rotate E</button></div>
           <div class="meta" id="pieceLabel">Track: Straight | Rotation: 0 deg</div>
         </div>
@@ -208,8 +209,9 @@
     </div>
     <div id="mobileQuick" aria-label="Quick build controls">
       <button id="mobileTrack" class="active">Track</button>
-      <button id="mobileRotL" aria-label="Rotate track left">Rotate ↶</button>
-      <button id="mobileRotR" aria-label="Rotate track right">Rotate ↷</button>
+      <button id="mobileRotL" aria-label="Rotate new track left">↶</button>
+      <button id="mobileRotR" aria-label="Rotate new track right">↷</button>
+      <button id="mobileRotateTrack" aria-label="Rotate a placed track">Edit ↻</button>
       <button id="mobileView">View</button>
       <button id="mobileErase">Erase</button>
     </div>
@@ -267,7 +269,7 @@
     class TrainForgeApp{
       constructor(){
         this.el = {};
-        ["view","panel","body","collapse","mobileTrack","mobileRotL","mobileRotR","mobileView","mobileErase","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
+        ["view","panel","body","collapse","mobileTrack","mobileRotL","mobileRotR","mobileRotateTrack","mobileView","mobileErase","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","toolRotateTrack","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
           .forEach((id) => this.el[id] = document.getElementById(id));
         this.state = {board: 30, tool: "track", trackType: "straight", treeType: "pine", animalType: "cow", terrainType: "block", rot: 0, paused: false, style: "classic", carts: 2, color: TRAIN_COLORS[0].hex, speedScale: 1};
         this.pointer = {inside: false, ndc: new THREE.Vector2(), leftDown: null, rightDown: null};
@@ -436,6 +438,7 @@
         this.el.mobileTrack.onclick = () => this._setTool("track");
         this.el.mobileRotL.onclick = () => this._rotate(-1);
         this.el.mobileRotR.onclick = () => this._rotate(1);
+        this.el.mobileRotateTrack.onclick = () => this._setTool("rotateTrack");
         this.el.mobileView.onclick = () => this._setTool("view");
         this.el.mobileErase.onclick = () => this._setTool("erase");
         this.el.toolTrack.onclick = () => this._setTool("track");
@@ -445,6 +448,7 @@
         this.el.toolBlock.onclick = () => this._setTool("block");
         this.el.toolErase.onclick = () => this._setTool("erase");
         this.el.toolView.onclick = () => this._setTool("view");
+        this.el.toolRotateTrack.onclick = () => this._setTool("rotateTrack");
         this.el.rotL.onclick = () => this._rotate(-1);
         this.el.rotR.onclick = () => this._rotate(1);
         document.querySelectorAll("#trackPieces button[data-piece]").forEach((b) => {
@@ -692,13 +696,16 @@
         this.el.toolBlock.classList.toggle("active", tool === "block");
         this.el.toolErase.classList.toggle("active", tool === "erase");
         this.el.toolView.classList.toggle("active", tool === "view");
+        this.el.toolRotateTrack.classList.toggle("active", tool === "rotateTrack");
         this.el.mobileTrack.classList.toggle("active", tool === "track");
+        this.el.mobileRotateTrack.classList.toggle("active", tool === "rotateTrack");
         this.el.mobileView.classList.toggle("active", tool === "view");
         this.el.mobileErase.classList.toggle("active", tool === "erase");
         this._syncControlsEnabled();
         this._updatePieceLabel();
         this._refreshHover();
         this._updateHud();
+        if(tool === "rotateTrack") this._msg("Tap a placed track to rotate it");
       }
       _rotate(d){
         this.state.rot = (this.state.rot + d * 90 + 360) % 360;
@@ -720,6 +727,10 @@
         if(this.state.tool === "animal"){
           const animalNames = {cow: "Cow", sheep: "Sheep", horse: "Horse"};
           this.el.pieceLabel.textContent = `Animal: ${animalNames[this.state.animalType] || "Cow"} | Roaming: on`;
+          return;
+        }
+        if(this.state.tool === "rotateTrack"){
+          this.el.pieceLabel.textContent = "Tap a placed track to rotate it 90 deg";
           return;
         }
         const names = {
@@ -868,6 +879,11 @@
         }
       }
       _handleClick(){
+        if(this.state.tool === "rotateTrack"){
+          if(!this.hoverCell){ this._msg("Tap a placed track"); return; }
+          if(this._rotatePlacedTrack(this.hoverCell.x, this.hoverCell.z)) this._refreshHover();
+          return;
+        }
         const forkKey = this._pickForkToggle();
         if(forkKey){
           this._toggleFork(forkKey);
@@ -1005,6 +1021,32 @@
         this.trackG.remove(t.mesh);
         this.tracks.delete(k);
         this._updateHud();
+      }
+      _rotatePlacedTrack(x, z){
+        const track = this.tracks.get(keyOf(x, z));
+        if(!track){
+          this._msg("No editable track on this tile");
+          return false;
+        }
+        const occupied = this.trains.some((train) => !train.dead && (
+          (train.cellX === x && train.cellZ === z) ||
+          (train.nextCellX === x && train.nextCellZ === z)
+        ));
+        if(occupied){
+          this._msg("Wait for the train to move off this track");
+          return false;
+        }
+        track.rot = (track.rot + 90) % 360;
+        track.connectors = connectorsFor(track.type, track.rot);
+        track.mesh.rotation.y = THREE.MathUtils.degToRad(track.rot);
+        if(track.type === "fork") this._updateForkVisual(track);
+        const arch = this.arches.get(keyOf(x, z));
+        if(arch){
+          arch.rot = track.rot;
+          arch.mesh.rotation.y = THREE.MathUtils.degToRad(track.rot);
+        }
+        this._msg(`Track rotated to ${track.rot} deg`);
+        return true;
       }
       _trackAt(x, z){
         const real = this.tracks.get(keyOf(x, z));
@@ -2535,7 +2577,7 @@
         this.el.hTrees.textContent = `Trees: ${this.trees.size}`;
         this.el.hAnimals.textContent = `Animals: ${this.animals.length}`;
         this.el.hTrains.textContent = `Trains: ${this.trains.length}`;
-        const modeName = this.state.tool === "track" ? "Place Track" : (this.state.tool === "tree" ? "Place Trees" : (this.state.tool === "animal" ? "Place Animals" : (this.state.tool === "block" ? "Place Terrain" : (this.state.tool === "train" ? "Place Train" : (this.state.tool === "erase" ? "Erase" : "View")))));
+        const modeName = this.state.tool === "track" ? "Place Track" : (this.state.tool === "tree" ? "Place Trees" : (this.state.tool === "animal" ? "Place Animals" : (this.state.tool === "block" ? "Place Terrain" : (this.state.tool === "train" ? "Place Train" : (this.state.tool === "erase" ? "Erase" : (this.state.tool === "rotateTrack" ? "Rotate Track" : "View"))))));
         this.el.hMode.textContent = `Mode: ${modeName}`;
       }
       _loop(){
