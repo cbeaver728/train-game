@@ -179,8 +179,10 @@
             <button data-animal="cow" class="active">Cow</button>
             <button data-animal="sheep">Sheep</button>
             <button data-animal="horse">Horse</button>
+            <button data-animal="longneck">Long Neck</button>
+            <button data-animal="trex">T-Rex</button>
           </div>
-          <div class="meta" style="margin-top:6px">Use animal mode to place roaming animals.</div>
+          <div class="meta" style="margin-top:6px">Use animal mode to place roaming animals. Nearby animals flee from a T-Rex until they are five squares away.</div>
         </div>
         <div class="sec">
           <h4>Train Setup</h4>
@@ -725,7 +727,7 @@
           return;
         }
         if(this.state.tool === "animal"){
-          const animalNames = {cow: "Cow", sheep: "Sheep", horse: "Horse"};
+          const animalNames = {cow: "Cow", sheep: "Sheep", horse: "Horse", longneck: "Long Neck", trex: "T-Rex"};
           this.el.pieceLabel.textContent = `Animal: ${animalNames[this.state.animalType] || "Cow"} | Roaming: on`;
           return;
         }
@@ -981,7 +983,8 @@
         if(this.state.tool === "animal"){
           if(!this.hoverAnimalCandidate){ this._msg("Animal cannot stand there"); return; }
           this._spawnAnimal(this.hoverAnimalCandidate.x, this.hoverAnimalCandidate.z, this.state.animalType);
-          this._msg(`${this.state.animalType[0].toUpperCase()}${this.state.animalType.slice(1)} placed`);
+          const animalLabels = {cow: "Cow", sheep: "Sheep", horse: "Horse", longneck: "Long Neck", trex: "T-Rex"};
+          this._msg(`${animalLabels[this.state.animalType] || "Animal"} placed`);
           this._refreshHover();
           return;
         }
@@ -1320,9 +1323,10 @@
           id: this.nextAnimalId++,
           type,
           mesh,
-          speed: 0.64 + Math.random() * 0.34,
+          speed: type === "trex" ? (0.72 + Math.random() * 0.28) : (type === "longneck" ? (0.48 + Math.random() * 0.22) : (0.64 + Math.random() * 0.34)),
           heading,
           turnTimer: 0.6 + Math.random() * 1.8,
+          fleeFromId: null,
           dead: false
         });
         this._updateHud();
@@ -1343,17 +1347,48 @@
       }
       _updateAnimals(dt){
         if(!this.animals.length) return;
+        const trexes = this.animals.filter((animal) => !animal.dead && animal.type === "trex");
+        const fleeDistance = TILE * 5;
         for(const a of this.animals){
           if(a.dead) continue;
-          a.turnTimer -= dt;
-          if(a.turnTimer <= 0){
-            let delta = (Math.random() - 0.5) * 0.9;
-            if(Math.random() < 0.34) delta += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2);
-            a.heading += delta;
-            a.turnTimer = 0.7 + Math.random() * 1.8;
+          let fleeing = false;
+          if(a.type !== "trex" && trexes.length){
+            let threat = trexes.find((t) => t.id === a.fleeFromId) || null;
+            if(threat){
+              const distance = a.mesh.position.distanceTo(threat.mesh.position);
+              if(distance >= fleeDistance) threat = null;
+            }
+            if(!threat){
+              let nearestDistance = Infinity;
+              for(const t of trexes){
+                const distance = a.mesh.position.distanceTo(t.mesh.position);
+                if(distance < nearestDistance){ nearestDistance = distance; threat = t; }
+              }
+              if(nearestDistance >= fleeDistance) threat = null;
+            }
+            a.fleeFromId = threat ? threat.id : null;
+            if(threat){
+              const awayX = a.mesh.position.x - threat.mesh.position.x;
+              const awayZ = a.mesh.position.z - threat.mesh.position.z;
+              if(Math.hypot(awayX, awayZ) < 0.001) a.heading = Math.random() * Math.PI * 2;
+              else a.heading = Math.atan2(awayX, awayZ);
+              a.turnTimer = 0.35;
+              fleeing = true;
+            }
+          }else{
+            a.fleeFromId = null;
+          }
+          if(!fleeing){
+            a.turnTimer -= dt;
+            if(a.turnTimer <= 0){
+              let delta = (Math.random() - 0.5) * 0.9;
+              if(Math.random() < 0.34) delta += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2);
+              a.heading += delta;
+              a.turnTimer = 0.7 + Math.random() * 1.8;
+            }
           }
           const dir = new THREE.Vector3(Math.sin(a.heading), 0, Math.cos(a.heading));
-          const step = a.speed * dt;
+          const step = a.speed * (fleeing ? 3.2 : 1) * dt;
           const prev = a.mesh.position.clone();
           const prevCell = this._worldToCell(prev.x, prev.z);
           const next = prev.clone().addScaledVector(dir, step);
@@ -1370,7 +1405,7 @@
             a.mesh.position.y = TRACK_Y + 0.04;
           }else{
             a.mesh.position.copy(prev);
-            a.heading += (Math.random() < 0.5 ? -1 : 1) * (Math.PI * (0.42 + Math.random() * 0.35));
+            if(!fleeing) a.heading += (Math.random() < 0.5 ? -1 : 1) * (Math.PI * (0.42 + Math.random() * 0.35));
             a.turnTimer = 0.2 + Math.random() * 0.7;
           }
           const yaw = a.heading;
@@ -1841,12 +1876,52 @@
       }
       _makeAnimalMesh(type, ghost){
         const g = new THREE.Group();
-        const bodyPalette = {cow: 0xf1f0ec, sheep: 0xf5f3ef, horse: 0x8a5a2f};
-        const darkPalette = {cow: 0x111111, sheep: 0x7b6752, horse: 0x3a2412};
+        const bodyPalette = {cow: 0xf1f0ec, sheep: 0xf5f3ef, horse: 0x8a5a2f, longneck: 0x4c9a45, trex: 0x8a552f};
+        const darkPalette = {cow: 0x111111, sheep: 0x7b6752, horse: 0x3a2412, longneck: 0x286b35, trex: 0x4f2d1b};
         const bodyMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : (bodyPalette[type] || bodyPalette.cow), roughness: 0.72, metalness: 0.05, transparent: ghost, opacity: ghost ? 0.55 : 1});
         const darkMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : (darkPalette[type] || darkPalette.cow), roughness: 0.78, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.55 : 1});
         const legGeo = new THREE.CylinderGeometry(0.055, 0.06, 0.46, 10);
-        if(type === "sheep"){
+        if(type === "longneck"){
+          const body = this._mesh(new THREE.SphereGeometry(0.42, 18, 14), bodyMat, -0.08, 0.58, 0);
+          body.scale.set(1.65, 0.82, 0.88);
+          g.add(body);
+          const neck = this._mesh(new THREE.CylinderGeometry(0.105, 0.18, 1.18, 14), bodyMat, 0.43, 1.05, 0);
+          neck.rotation.z = -0.24;
+          g.add(neck);
+          const head = this._mesh(new THREE.SphereGeometry(0.18, 14, 11), bodyMat, 0.58, 1.63, 0);
+          head.scale.set(1.25, 0.72, 0.82);
+          g.add(head);
+          g.add(this._mesh(new THREE.SphereGeometry(0.035, 8, 6), darkMat, 0.68, 1.67, 0.13));
+          g.add(this._mesh(new THREE.SphereGeometry(0.035, 8, 6), darkMat, 0.68, 1.67, -0.13));
+          const tail = this._mesh(new THREE.ConeGeometry(0.2, 0.92, 12), bodyMat, -0.83, 0.57, 0);
+          tail.rotation.z = -Math.PI / 2;
+          g.add(tail);
+          const dinoLegGeo = new THREE.CylinderGeometry(0.075, 0.09, 0.62, 10);
+          for(const p of [[-0.42,-0.19],[0.28,-0.19],[-0.42,0.19],[0.28,0.19]]) g.add(this._mesh(dinoLegGeo, darkMat, p[0], 0.22, p[1]));
+        }else if(type === "trex"){
+          const body = this._mesh(new THREE.SphereGeometry(0.44, 18, 14), bodyMat, -0.08, 0.76, 0);
+          body.scale.set(1.48, 0.92, 0.82);
+          g.add(body);
+          const head = this._mesh(new THREE.BoxGeometry(0.62, 0.42, 0.48), bodyMat, 0.62, 1.13, 0);
+          g.add(head);
+          g.add(this._mesh(new THREE.BoxGeometry(0.36, 0.16, 0.43), darkMat, 0.86, 1.02, 0));
+          g.add(this._mesh(new THREE.SphereGeometry(0.04, 8, 6), darkMat, 0.72, 1.22, 0.25));
+          g.add(this._mesh(new THREE.SphereGeometry(0.04, 8, 6), darkMat, 0.72, 1.22, -0.25));
+          const tail = this._mesh(new THREE.ConeGeometry(0.25, 1.28, 12), bodyMat, -0.93, 0.73, 0);
+          tail.rotation.z = -Math.PI / 2;
+          g.add(tail);
+          const rexLegGeo = new THREE.CylinderGeometry(0.105, 0.13, 0.76, 10);
+          for(const z of [-0.23,0.23]){
+            g.add(this._mesh(rexLegGeo, darkMat, -0.08, 0.3, z));
+            g.add(this._mesh(new THREE.BoxGeometry(0.38, 0.12, 0.17), darkMat, 0.08, -0.08, z));
+          }
+          const armGeo = new THREE.CylinderGeometry(0.035, 0.045, 0.38, 8);
+          for(const z of [-0.27,0.27]){
+            const arm = this._mesh(armGeo, darkMat, 0.39, 0.82, z);
+            arm.rotation.z = -0.85;
+            g.add(arm);
+          }
+        }else if(type === "sheep"){
           g.add(this._mesh(new THREE.SphereGeometry(0.34, 14, 12), bodyMat, 0, 0.5, 0));
           g.add(this._mesh(new THREE.SphereGeometry(0.18, 12, 10), darkMat, 0.3, 0.48, 0.03));
           for(const p of [[-0.14,-0.12],[0.14,-0.12],[-0.14,0.12],[0.14,0.12]]){
@@ -1889,7 +1964,7 @@
           rightA.scale.set(1.24, 0.82, 0.46);
           g.add(rightA);
         }
-        g.scale.setScalar(1.8);
+        g.scale.setScalar(type === "longneck" ? 1.35 : (type === "trex" ? 1.45 : 1.8));
         g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
         return g;
       }
@@ -2533,7 +2608,7 @@
           const type = (row && allowedTrees.has(row.type)) ? row.type : "pine";
           this._placeTree(x, z, type);
         }
-        const allowedAnimals = new Set(["cow", "sheep", "horse"]);
+        const allowedAnimals = new Set(["cow", "sheep", "horse", "longneck", "trex"]);
         const animals = Array.isArray(data.animals) ? data.animals : [];
         for(const row of animals){
           const x = Number(row && row.x);
@@ -2595,7 +2670,7 @@
       }
     }
 
-    new TrainForgeApp();
+    window.trainForge = new TrainForgeApp();
   </script>
 </body>
 </html>
