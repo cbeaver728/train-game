@@ -1346,9 +1346,13 @@
         return false;
       }
       _updateAnimals(dt){
-        if(!this.animals.length) return;
+        if(!this.animals.length){
+          this.el.view.dataset.fleeingCount = "0";
+          return;
+        }
         const trexes = this.animals.filter((animal) => !animal.dead && animal.type === "trex");
         const fleeDistance = TILE * 5;
+        let fleeingCount = 0;
         for(const a of this.animals){
           if(a.dead) continue;
           let fleeing = false;
@@ -1374,6 +1378,7 @@
               else a.heading = Math.atan2(awayX, awayZ);
               a.turnTimer = 0.35;
               fleeing = true;
+              fleeingCount += 1;
             }
           }else{
             a.fleeFromId = null;
@@ -1413,6 +1418,7 @@
           dy = Math.atan2(Math.sin(dy), Math.cos(dy));
           a.mesh.rotation.y += dy * Math.min(1, dt * 6.5);
         }
+        this.el.view.dataset.fleeingCount = String(fleeingCount);
       }
       _validateTrackCandidate(x, z, type, rot){
         const out = {valid: false, matchedDirs: [], mismatch: 0};
