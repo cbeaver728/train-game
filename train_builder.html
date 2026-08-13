@@ -1,0 +1,2484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrainForge 3D</title>
+  <style>
+    :root{
+      --ink:#102637;
+      --line:#b6cad9;
+    }
+    html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",Tahoma,sans-serif;background:#cfe0ef;color:var(--ink)}
+    #app{position:relative;width:100%;height:100%}
+    #view{position:absolute;inset:0;width:100%;height:100%;display:block}
+    #panel{
+      position:absolute;left:12px;top:12px;bottom:12px;width:332px;
+      display:flex;flex-direction:column;overflow:hidden;
+      border:1px solid var(--line);border-radius:14px;background:rgba(247,251,255,.96);
+      box-shadow:0 12px 30px rgba(5,18,30,.25)
+    }
+    #panel.collapsed{width:100px}
+    #panel.collapsed #body{display:none}
+    #panel.collapsed #head b{display:none}
+    #panel.collapsed #collapse{width:100%}
+    #head{display:flex;align-items:center;gap:6px;padding:10px;border-bottom:1px solid #c9d8e3;background:linear-gradient(180deg,#fafdff,#edf5fc)}
+    #head b{margin-right:auto}
+    #body{padding:10px;overflow:auto;display:grid;gap:8px}
+    .sec{border:1px solid #c6d7e5;border-radius:10px;padding:8px;background:#fff}
+    .sec h4{margin:0 0 6px 0;font-size:12px;text-transform:uppercase;letter-spacing:.45px;color:#27475f}
+    .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .fill{flex:1;min-width:0}
+    button,select,input{font-size:12px;color:#173248;background:#fff;border:1px solid #b5c8d7;border-radius:8px;padding:6px 8px}
+    button{cursor:pointer}
+    button.active{background:#d9ebfb;border-color:#78a5cb;font-weight:600}
+    #trackPieces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+    #terrainTypes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+    #treeTypes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+    #animalTypes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+    #trainColors{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px}
+    .sw{aspect-ratio:1;border-radius:6px;border:1px solid rgba(0,0,0,.28);cursor:pointer}
+    .sw.active{outline:2px solid #1f6fa8;outline-offset:1px}
+    .treeBtn{display:flex;align-items:center;justify-content:center;gap:5px}
+    .iconTree{
+      position:relative;display:inline-block;width:12px;height:13px;flex:none
+    }
+    .iconTree::before{
+      content:"";position:absolute;left:0;right:0;margin:auto;top:0;
+      width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #2f8f4f
+    }
+    .iconTree::after{
+      content:"";position:absolute;left:5px;top:9px;width:2px;height:4px;background:#6c4a2b
+    }
+    .iconTree.round::before{
+      width:9px;height:9px;border:none;border-radius:50%;background:#3b9860;left:1.5px;right:auto
+    }
+    .iconTree.autumn::before{
+      width:9px;height:9px;border:none;border-radius:44% 56% 49% 51%;background:#c87a2d;left:1.5px;right:auto
+    }
+    .meta{font-size:11px;color:#4e657a}
+    #hud{
+      position:absolute;left:50%;top:12px;transform:translateX(-50%);
+      display:flex;gap:10px;padding:6px 11px;font-size:12px;border:1px solid #b6cad9;border-radius:10px;
+      background:rgba(247,252,255,.93);pointer-events:none
+    }
+    #lockWrap{
+      position:absolute;right:16px;top:12px;padding:6px 10px;border-radius:10px;
+      border:1px solid #9eddbf;background:rgba(238,255,245,.95);display:none;align-items:center;gap:7px;
+      font-size:12px;color:#145a38
+    }
+    #lockWrap.show{display:flex}
+    .linkIcon{position:relative;width:20px;height:12px}
+    .linkIcon::before,.linkIcon::after{content:"";position:absolute;top:1px;width:9px;height:8px;border:2px solid #23a15f;border-radius:7px}
+    .linkIcon::before{left:0}
+    .linkIcon::after{right:0}
+    #status{
+      position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+      background:rgba(14,29,44,.89);color:#eef7ff;padding:7px 11px;border-radius:10px;font-size:12px;
+      opacity:0;transition:opacity .14s
+    }
+    #status.show{opacity:1}
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="view"></canvas>
+    <div id="panel">
+      <div id="head"><b>TrainForge 3D</b><button id="collapse">Hide</button></div>
+      <div id="body">
+        <div class="sec">
+          <h4>Tools</h4>
+          <div class="row"><button id="toolTrack" class="active fill">Place Track</button><button id="toolTrain" class="fill">Place Train</button><button id="toolTree" class="fill treeBtn"><span class="iconTree"></span>Trees</button></div>
+          <div class="row" style="margin-top:6px"><button id="toolAnimal" class="fill">Animals</button><button id="toolBlock" class="fill">Terrain</button><button id="toolErase" class="fill">Erase</button><button id="toolView" class="fill">View</button></div>
+          <div class="row" style="margin-top:6px"><button id="rotL" class="fill">Rotate Q</button><button id="rotR" class="fill">Rotate E</button></div>
+          <div class="meta" id="pieceLabel">Track: Straight | Rotation: 0 deg</div>
+        </div>
+        <div class="sec">
+          <h4>Track Pieces</h4>
+          <div id="trackPieces">
+            <button data-piece="straight" class="active">Straight</button>
+            <button data-piece="curve_l">Curved Track</button>
+            <button data-piece="cross">4-Way</button>
+            <button data-piece="slope">Slope Track</button>
+            <button data-piece="fork">Fork Switch</button>
+          </div>
+          <div class="meta" style="margin-top:6px">Tracks interlock when connectors align. If rotation is wrong, placement auto-rotates to the nearest valid join. Fork switches are toggled by clicking their side lever.</div>
+        </div>
+        <div class="sec">
+          <h4>Terrain</h4>
+          <div id="terrainTypes">
+            <button data-terrain="block" class="active">Block</button>
+            <button data-terrain="slope">Slope Block</button>
+            <button data-terrain="arch">Arch</button>
+            <button data-terrain="pond">Pond</button>
+            <button data-terrain="mountain">Canyon 3x3</button>
+          </div>
+          <div class="meta" style="margin-top:6px">Stack blocks to raise terrain. Arch can be placed over straight, curved, or slope track, and blocks can stack above it to form tunnels. Ponds can be placed on open ground tiles. Canyon creates a 3x3 scene with an open center run and cactuses.</div>
+        </div>
+        <div class="sec">
+          <h4>Trees</h4>
+          <div id="treeTypes">
+            <button data-tree="pine" class="active treeBtn"><span class="iconTree"></span>Pine</button>
+            <button data-tree="round" class="treeBtn"><span class="iconTree round"></span>Round</button>
+            <button data-tree="autumn" class="treeBtn"><span class="iconTree autumn"></span>Autumn</button>
+          </div>
+          <div class="meta" style="margin-top:6px">Use tree mode to place scenery on empty tiles.</div>
+        </div>
+        <div class="sec">
+          <h4>Animals</h4>
+          <div id="animalTypes">
+            <button data-animal="cow" class="active">Cow</button>
+            <button data-animal="sheep">Sheep</button>
+            <button data-animal="horse">Horse</button>
+          </div>
+          <div class="meta" style="margin-top:6px">Use animal mode to place roaming animals.</div>
+        </div>
+        <div class="sec">
+          <h4>Train Setup</h4>
+          <div class="row"><select id="trainStyle" class="fill"><option value="classic">Classic Steam</option><option value="bullet">Streamliner</option><option value="freight">Freight Diesel</option><option value="passenger">Passenger Express</option></select></div>
+          <div class="row" style="margin-top:6px"><label for="cartCount">Carts</label><input id="cartCount" type="range" min="0" max="8" value="2" class="fill"><span id="cartLabel">2</span></div>
+          <div id="trainColors" style="margin-top:6px"></div>
+          <div class="meta">In train mode, rotate to choose forward direction before placing.</div>
+        </div>
+        <div class="sec">
+          <h4>Simulation</h4>
+          <div class="row"><label for="speedScale">Speed</label><input id="speedScale" type="range" min="25" max="300" value="100" class="fill"><span id="speedLabel">1.00x</span></div>
+          <div class="row"><button id="pauseBtn" class="fill">Pause</button><button id="clearTrains" class="fill">Clear Trains</button></div>
+          <div class="row" style="margin-top:6px"><button id="clearTracks" class="fill">Clear Tracks</button><button id="clearTrees" class="fill">Clear Trees</button></div>
+          <div class="row" style="margin-top:6px"><button id="clearAnimals" class="fill">Clear Animals</button></div>
+          <div class="row" style="margin-top:6px"><button id="clearTerrain" class="fill">Clear Terrain</button></div>
+          <div class="row" style="margin-top:6px"><button id="saveWorld" class="fill">Save World</button><button id="loadWorld" class="fill">Load World</button></div>
+          <input id="loadWorldFile" type="file" accept=".json,application/json" style="display:none">
+          <div class="row" style="margin-top:6px"><button id="resetAll" class="fill">Reset All</button></div>
+        </div>
+        <div class="sec">
+          <h4>Base Plane</h4>
+          <div class="row"><select id="boardSize" class="fill"><option value="20">20 x 20</option><option value="30" selected>30 x 30</option><option value="40">40 x 40</option><option value="50">50 x 50</option></select><button id="applyBoard">Apply</button></div>
+          <div class="meta">Hold V (or right mouse drag) to temporarily enter camera view while placing.</div>
+        </div>
+      </div>
+    </div>
+    <div id="hud"><span id="hTracks">Tracks: 0</span><span id="hBlocks">Blocks: 0</span><span id="hTrees">Trees: 0</span><span id="hAnimals">Animals: 0</span><span id="hTrains">Trains: 0</span><span id="hMode">Mode: Place Track</span></div>
+    <div id="lockWrap"><span class="linkIcon"></span><span id="lockLabel">1 interlock</span></div>
+    <div id="status"></div>
+  </div>
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+
+    const TILE = 3.2;
+    const BLOCK_H = 0.92;
+    const TRAIN_Y = 0.33;
+    const TRACK_Y = 0.02;
+    const ARCH_STACK_BASE_UNITS = 2.15;
+    const DIRS = ["N", "E", "S", "W"];
+    const DIR_I = {N: 0, E: 1, S: 2, W: 3};
+    const OPP = {N: "S", E: "W", S: "N", W: "E"};
+    const DIR_STEP = {
+      N: {x: 0, z: -1, vec: new THREE.Vector3(0, 0, -1)},
+      E: {x: 1, z: 0, vec: new THREE.Vector3(1, 0, 0)},
+      S: {x: 0, z: 1, vec: new THREE.Vector3(0, 0, 1)},
+      W: {x: -1, z: 0, vec: new THREE.Vector3(-1, 0, 0)}
+    };
+    const TRAIN_COLORS = [
+      {name: "Cherry", hex: "#cb2f2f"}, {name: "Navy", hex: "#1c4f9b"}, {name: "Emerald", hex: "#1f8b57"},
+      {name: "Marigold", hex: "#d49a21"}, {name: "Graphite", hex: "#474d57"}, {name: "Teal", hex: "#1d8f93"},
+      {name: "Orange", hex: "#d9651d"}, {name: "Purple", hex: "#6a4bb6"}, {name: "Silver", hex: "#b6bec7"},
+      {name: "Black", hex: "#171a1f"}, {name: "Rose", hex: "#c45877"}, {name: "Olive", hex: "#728a2f"}
+    ];
+    const keyOf = (x, z) => `${x},${z}`;
+    const rotSteps = (deg) => ((((Math.round(deg) % 360) + 360) % 360) / 90) | 0;
+    const rotateDir = (dir, steps) => DIRS[(DIR_I[dir] + steps + 4) % 4];
+    const yawForDir = (dir) => Math.atan2(DIR_STEP[dir].x, DIR_STEP[dir].z);
+    function connectorsFor(type, rotDeg){
+      // Mesh rotation uses positive Y (counterclockwise in our grid map),
+      // so logical connector rotation must use the inverse step.
+      const s = -rotSteps(rotDeg);
+      if(type === "straight") return new Set([rotateDir("N", s), rotateDir("S", s)]);
+      // Legacy "curve" maps to curve-right for compatibility.
+      if(type === "curve" || type === "curve_r") return new Set([rotateDir("S", s), rotateDir("E", s)]);
+      if(type === "curve_l") return new Set([rotateDir("S", s), rotateDir("W", s)]);
+      if(type === "slope") return new Set([rotateDir("S", s), rotateDir("N", s)]);
+      if(type === "fork") return new Set([rotateDir("S", s), rotateDir("E", s), rotateDir("W", s)]);
+      return new Set(["N", "E", "S", "W"]);
+    }
+    function exitFor(type, rotDeg, entry){
+      const c = connectorsFor(type, rotDeg);
+      if(!c.has(entry)) return null;
+      if(type === "curve" || type === "curve_r" || type === "curve_l"){ for(const d of c){ if(d !== entry) return d; } return null; }
+      return OPP[entry];
+    }
+
+    class TrainForgeApp{
+      constructor(){
+        this.el = {};
+        ["view","panel","body","collapse","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
+          .forEach((id) => this.el[id] = document.getElementById(id));
+        this.state = {board: 30, tool: "track", trackType: "straight", treeType: "pine", animalType: "cow", terrainType: "block", rot: 0, paused: false, style: "classic", carts: 2, color: TRAIN_COLORS[0].hex, speedScale: 1};
+        this.pointer = {inside: false, ndc: new THREE.Vector2(), leftDown: null, rightDown: null};
+        this.statusTimer = null;
+        this.lastFrame = performance.now();
+        this.rightViewActive = false;
+        this.keyViewActive = false;
+        this.nextTrackId = 1;
+        this.nextTrainId = 1;
+        this.nextAnimalId = 1;
+        this.boardWorld = this.state.board * TILE;
+        this.tracks = new Map();
+        this.blocks = new Map();
+        this.arches = new Map();
+        this.ponds = new Map();
+        this.mountains = new Map();
+        this.mountainCellIndex = new Map();
+        this.trees = new Map();
+        this.animals = [];
+        this.trains = [];
+        this.fx = [];
+        this.hoverCell = null;
+        this.hoverTrackCandidate = null;
+        this.hoverBlockCandidate = null;
+        this.hoverTreeCandidate = null;
+        this.hoverAnimalCandidate = null;
+        this.hoverTrainCandidate = null;
+        this._initThree();
+        this._buildUi();
+        this._buildBoard();
+        this._rebuildGhostBlock();
+        this._rebuildGhostTrack();
+        this._rebuildGhostTree();
+        this._rebuildGhostAnimal();
+        this._rebuildGhostTrain();
+        this._bind();
+        this._setTool("track");
+        this._updateHud();
+        this._msg("Ready");
+        this._loop();
+      }
+      _initThree(){
+        this.renderer = new THREE.WebGLRenderer({canvas: this.el.view, antialias: true, preserveDrawingBuffer: true});
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+        this.renderer.setSize(innerWidth, innerHeight);
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0xd5e6f4);
+        this.scene.fog = new THREE.Fog(0xd5e6f4, 110, 390);
+        this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1600);
+        this.camera.position.set(38, 33, 36);
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.08;
+        this.controls.target.set(0, 0, 0);
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+        this.controls.minDistance = 8;
+        this.controls.maxDistance = 700;
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+        this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+        this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+        this.controls.enabled = false;
+        const hemi = new THREE.HemisphereLight(0xf4f9ff, 0x5f7687, 1.1);
+        this.scene.add(hemi);
+        const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+        sun.position.set(36, 54, 22);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.camera.left = -110;
+        sun.shadow.camera.right = 110;
+        sun.shadow.camera.top = 110;
+        sun.shadow.camera.bottom = -110;
+        sun.shadow.camera.near = 0.1;
+        sun.shadow.camera.far = 260;
+        this.scene.add(sun);
+        this.world = new THREE.Group();
+        this.blockG = new THREE.Group();
+        this.mountainG = new THREE.Group();
+        this.archG = new THREE.Group();
+        this.pondG = new THREE.Group();
+        this.trackG = new THREE.Group();
+        this.treeG = new THREE.Group();
+        this.animalG = new THREE.Group();
+        this.ghostG = new THREE.Group();
+        this.snapG = new THREE.Group();
+        this.trainG = new THREE.Group();
+        this.fxG = new THREE.Group();
+        this.world.add(this.blockG, this.mountainG, this.archG, this.pondG, this.trackG, this.treeG, this.animalG, this.ghostG, this.snapG, this.trainG, this.fxG);
+        this.scene.add(this.world);
+        const floorTex = this._makeFloorTexture();
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(1100, 1100), new THREE.MeshStandardMaterial({map: floorTex, roughness: 0.87, metalness: 0.02}));
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.42;
+        floor.receiveShadow = true;
+        this.scene.add(floor);
+        this.ray = new THREE.Raycaster();
+      }
+      _makeFloorTexture(){
+        const c = document.createElement("canvas");
+        c.width = 1024;
+        c.height = 1024;
+        const g = c.getContext("2d");
+        g.fillStyle = "#bca47d";
+        g.fillRect(0, 0, c.width, c.height);
+        const plankH = 64;
+        for(let y = 0; y < c.height; y += plankH){
+          g.fillStyle = (Math.floor(y / plankH) % 2) ? "#c6ae85" : "#b89f76";
+          g.fillRect(0, y, c.width, plankH - 2);
+          g.fillStyle = "rgba(65,46,25,.15)";
+          g.fillRect(0, y + plankH - 2, c.width, 2);
+        }
+        for(let i = 0; i < 2200; i++){
+          g.fillStyle = `rgba(60,40,20,${Math.random() * 0.06})`;
+          g.fillRect(Math.random() * c.width, Math.random() * c.height, 1, 1);
+        }
+        const t = new THREE.CanvasTexture(c);
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(10, 10);
+        return t;
+      }
+      _buildUi(){
+        TRAIN_COLORS.forEach((entry, i) => {
+          const b = document.createElement("button");
+          b.className = "sw" + (i === 0 ? " active" : "");
+          b.style.background = entry.hex;
+          b.title = entry.name;
+          b.dataset.hex = entry.hex;
+          this.el.trainColors.appendChild(b);
+        });
+        this.el.speedScale.value = String(Math.round(this.state.speedScale * 100));
+        this.el.speedLabel.textContent = `${this.state.speedScale.toFixed(2)}x`;
+        this._updatePieceLabel();
+      }
+      _bind(){
+        addEventListener("resize", () => {
+          this.camera.aspect = innerWidth / innerHeight;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(innerWidth, innerHeight);
+        });
+        this.el.view.addEventListener("pointerenter", () => this.pointer.inside = true);
+        this.el.view.addEventListener("pointerleave", () => {
+          this.pointer.inside = false;
+          this.pointer.leftDown = null;
+          this.pointer.rightDown = null;
+          this._setRightView(false);
+          this._hideGhosts();
+        });
+        this.el.view.addEventListener("contextmenu", (e) => e.preventDefault());
+        this.el.view.addEventListener("pointerdown", (e) => this._onPointerDown(e));
+        this.el.view.addEventListener("pointermove", (e) => this._onPointerMove(e));
+        this.el.view.addEventListener("pointerup", (e) => this._onPointerUp(e));
+        this.el.view.addEventListener("wheel", (e) => this._onWheelZoom(e), {passive: false});
+        addEventListener("keydown", (e) => this._onKey(e));
+        addEventListener("keyup", (e) => this._onKeyUp(e));
+        addEventListener("blur", () => this._setKeyView(false));
+        this.el.collapse.onclick = () => {
+          const collapsed = !this.el.panel.classList.contains("collapsed");
+          this.el.panel.classList.toggle("collapsed", collapsed);
+          this.el.collapse.textContent = collapsed ? "Show" : "Hide";
+        };
+        this.el.toolTrack.onclick = () => this._setTool("track");
+        this.el.toolTrain.onclick = () => this._setTool("train");
+        this.el.toolTree.onclick = () => this._setTool("tree");
+        this.el.toolAnimal.onclick = () => this._setTool("animal");
+        this.el.toolBlock.onclick = () => this._setTool("block");
+        this.el.toolErase.onclick = () => this._setTool("erase");
+        this.el.toolView.onclick = () => this._setTool("view");
+        this.el.rotL.onclick = () => this._rotate(-1);
+        this.el.rotR.onclick = () => this._rotate(1);
+        document.querySelectorAll("#trackPieces button[data-piece]").forEach((b) => {
+          b.onclick = () => {
+            this.state.trackType = b.dataset.piece;
+            document.querySelectorAll("#trackPieces button[data-piece]").forEach((x) => x.classList.toggle("active", x === b));
+            this._rebuildGhostTrack();
+            this._updatePieceLabel();
+            this._setTool("track");
+            this._refreshHover();
+          };
+        });
+        document.querySelectorAll("#treeTypes button[data-tree]").forEach((b) => {
+          b.onclick = () => {
+            this.state.treeType = b.dataset.tree;
+            document.querySelectorAll("#treeTypes button[data-tree]").forEach((x) => x.classList.toggle("active", x === b));
+            this._rebuildGhostTree();
+            this._setTool("tree");
+            this._refreshHover();
+          };
+        });
+        document.querySelectorAll("#animalTypes button[data-animal]").forEach((b) => {
+          b.onclick = () => {
+            this.state.animalType = b.dataset.animal;
+            document.querySelectorAll("#animalTypes button[data-animal]").forEach((x) => x.classList.toggle("active", x === b));
+            this._rebuildGhostAnimal();
+            this._setTool("animal");
+            this._refreshHover();
+          };
+        });
+        document.querySelectorAll("#terrainTypes button[data-terrain]").forEach((b) => {
+          b.onclick = () => {
+            this.state.terrainType = b.dataset.terrain;
+            document.querySelectorAll("#terrainTypes button[data-terrain]").forEach((x) => x.classList.toggle("active", x === b));
+            this._rebuildGhostBlock();
+            this._setTool("block");
+            this._refreshHover();
+          };
+        });
+        this.el.trainColors.addEventListener("click", (e) => {
+          const b = e.target.closest(".sw");
+          if(!b) return;
+          this.state.color = b.dataset.hex;
+          [...this.el.trainColors.children].forEach((x) => x.classList.toggle("active", x === b));
+          this._rebuildGhostTrain();
+          this._refreshHover();
+        });
+        this.el.trainStyle.onchange = () => {
+          this.state.style = this.el.trainStyle.value;
+          this._rebuildGhostTrain();
+          this._refreshHover();
+        };
+        this.el.cartCount.oninput = () => {
+          this.state.carts = Number(this.el.cartCount.value);
+          this.el.cartLabel.textContent = String(this.state.carts);
+          this._rebuildGhostTrain();
+          this._refreshHover();
+        };
+        this.el.speedScale.oninput = () => {
+          const v = Number(this.el.speedScale.value);
+          this.state.speedScale = Math.max(0.25, Math.min(3, v / 100));
+          this.el.speedLabel.textContent = `${this.state.speedScale.toFixed(2)}x`;
+        };
+        this.el.pauseBtn.onclick = () => {
+          this.state.paused = !this.state.paused;
+          this.el.pauseBtn.textContent = this.state.paused ? "Resume" : "Pause";
+          this._msg(this.state.paused ? "Simulation paused" : "Simulation resumed");
+        };
+        this.el.clearTrains.onclick = () => this._clearTrains(true);
+        this.el.clearTracks.onclick = () => this._clearTracks(true);
+        this.el.clearTrees.onclick = () => this._clearTrees(true);
+        this.el.clearAnimals.onclick = () => this._clearAnimals(true);
+        this.el.clearTerrain.onclick = () => this._clearTerrain(true);
+        this.el.saveWorld.onclick = () => this._saveWorldToFile();
+        this.el.loadWorld.onclick = () => this.el.loadWorldFile.click();
+        this.el.loadWorldFile.addEventListener("change", () => {
+          const file = this.el.loadWorldFile.files && this.el.loadWorldFile.files[0];
+          if(file) this._loadWorldFromFile(file);
+          this.el.loadWorldFile.value = "";
+        });
+        this.el.resetAll.onclick = () => {
+          this._clearTrains(false);
+          this._clearTracks(false);
+          this._clearTrees(false);
+          this._clearAnimals(false);
+          this._clearTerrain(false);
+          this._msg("Scene reset");
+        };
+        this.el.applyBoard.onclick = () => {
+          const n = Number(this.el.boardSize.value);
+          if(!Number.isFinite(n) || n < 12 || n > 80) return;
+          if((this.tracks.size || this.trains.length || this.trees.size || this.animals.length || this.blocks.size || this.arches.size || this.ponds.size || this.mountains.size) && !confirm("Changing base size clears tracks, trees, animals, terrain, and trains. Continue?")) return;
+          this.state.board = n;
+          this.boardWorld = this.state.board * TILE;
+          this._clearTrains(false);
+          this._clearTracks(false);
+          this._clearTrees(false);
+          this._clearAnimals(false);
+          this._clearTerrain(false);
+          this._buildBoard();
+          this._refreshHover();
+          this._msg(`Base plane set to ${n} x ${n}`);
+        };
+      }
+      _onPointerDown(e){
+        this._setNdc(e.clientX, e.clientY);
+        if(e.button === 2){
+          if(this.state.tool !== "view"){
+            this.pointer.rightDown = {x: e.clientX, y: e.clientY, moved: false};
+            this._setRightView(true);
+          }
+          return;
+        }
+        if(e.button !== 0) return;
+        if(this.keyViewActive) return;
+        this.pointer.leftDown = {x: e.clientX, y: e.clientY, moved: false};
+      }
+      _onPointerMove(e){
+        this._setNdc(e.clientX, e.clientY);
+        if(this.pointer.leftDown && Math.hypot(e.clientX - this.pointer.leftDown.x, e.clientY - this.pointer.leftDown.y) > 3) this.pointer.leftDown.moved = true;
+        if(this.pointer.rightDown && Math.hypot(e.clientX - this.pointer.rightDown.x, e.clientY - this.pointer.rightDown.y) > 3) this.pointer.rightDown.moved = true;
+        this._refreshHover();
+      }
+      _onPointerUp(e){
+        this._setNdc(e.clientX, e.clientY);
+        if(e.button === 2){
+          if(this.pointer.rightDown){
+            this._setRightView(false);
+            this.pointer.rightDown = null;
+          }
+          return;
+        }
+        if(e.button !== 0) return;
+        const isClick = this.pointer.leftDown && !this.pointer.leftDown.moved;
+        this.pointer.leftDown = null;
+        if(isClick) this._handleClick();
+      }
+      _onWheelZoom(e){
+        if(this.state.tool === "view" || this.rightViewActive || this.keyViewActive) return;
+        e.preventDefault();
+        const zoomFactor = Math.exp(e.deltaY * 0.0015);
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const dist = THREE.MathUtils.clamp(
+          offset.length() * zoomFactor,
+          this.controls.minDistance || 0.1,
+          this.controls.maxDistance || Infinity
+        );
+        if(dist <= 0.001) return;
+        offset.setLength(dist);
+        this.camera.position.copy(this.controls.target).add(offset);
+        this.controls.update();
+      }
+      _onKey(e){
+        const k = e.key.toLowerCase();
+        if(k === "v"){
+          this._setKeyView(true);
+          return;
+        }
+        if(k === "arrowup" || k === "arrowdown" || k === "arrowleft" || k === "arrowright"){
+          e.preventDefault();
+          this._nudgeCamera(k, e.shiftKey ? 2.3 : 1.25);
+          return;
+        }
+        if(e.repeat) return;
+        if(k === "q"){ this._rotate(-1); return; }
+        if(k === "e"){ this._rotate(1); return; }
+        if(k === " "){
+          e.preventDefault();
+          this.state.paused = !this.state.paused;
+          this.el.pauseBtn.textContent = this.state.paused ? "Resume" : "Pause";
+          this._msg(this.state.paused ? "Simulation paused" : "Simulation resumed");
+          return;
+        }
+        if(k === "1"){ this._setTool("track"); return; }
+        if(k === "2"){ this._setTool("train"); return; }
+        if(k === "3"){ this._setTool("tree"); return; }
+        if(k === "4"){ this._setTool("animal"); return; }
+        if(k === "5"){ this._setTool("block"); return; }
+        if(k === "6"){ this._setTool("erase"); return; }
+        if(k === "7"){ this._setTool("view"); }
+      }
+      _onKeyUp(e){
+        const k = e.key.toLowerCase();
+        if(k === "v") this._setKeyView(false);
+      }
+      _nudgeCamera(key, amount){
+        const f = new THREE.Vector3();
+        this.camera.getWorldDirection(f);
+        f.y = 0;
+        if(f.lengthSq() < 1e-6) f.set(0, 0, -1);
+        else f.normalize();
+        const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(0, 1, 0)).normalize();
+        const d = new THREE.Vector3();
+        if(key === "arrowup") d.copy(f).multiplyScalar(amount);
+        if(key === "arrowdown") d.copy(f).multiplyScalar(-amount);
+        if(key === "arrowleft") d.copy(r).multiplyScalar(-amount);
+        if(key === "arrowright") d.copy(r).multiplyScalar(amount);
+        this.camera.position.add(d);
+        this.controls.target.add(d);
+      }
+      _setNdc(cx, cy){
+        const r = this.el.view.getBoundingClientRect();
+        this.pointer.ndc.x = ((cx - r.left) / r.width) * 2 - 1;
+        this.pointer.ndc.y = -((cy - r.top) / r.height) * 2 + 1;
+      }
+      _setRightView(enabled){
+        this.rightViewActive = enabled;
+        this._syncControlsEnabled();
+      }
+      _setKeyView(enabled){
+        if(this.keyViewActive === enabled) return;
+        this.keyViewActive = enabled;
+        if(enabled){
+          this.pointer.leftDown = null;
+          this.pointer.rightDown = null;
+        }
+        this._syncControlsEnabled();
+      }
+      _syncControlsEnabled(){
+        this.controls.enabled = (this.state.tool === "view") || this.rightViewActive || this.keyViewActive;
+      }
+      _setTool(tool){
+        this.state.tool = tool;
+        this.el.toolTrack.classList.toggle("active", tool === "track");
+        this.el.toolTrain.classList.toggle("active", tool === "train");
+        this.el.toolTree.classList.toggle("active", tool === "tree");
+        this.el.toolAnimal.classList.toggle("active", tool === "animal");
+        this.el.toolBlock.classList.toggle("active", tool === "block");
+        this.el.toolErase.classList.toggle("active", tool === "erase");
+        this.el.toolView.classList.toggle("active", tool === "view");
+        this._syncControlsEnabled();
+        this._updatePieceLabel();
+        this._refreshHover();
+        this._updateHud();
+      }
+      _rotate(d){
+        this.state.rot = (this.state.rot + d * 90 + 360) % 360;
+        if(this.state.tool === "block") this._rebuildGhostBlock();
+        this._updatePieceLabel();
+        this._refreshHover();
+      }
+      _updatePieceLabel(){
+        if(this.state.tool === "block"){
+          const names = {block: "Block", slope: "Slope Block", arch: "Arch", pond: "Pond", mountain: "Canyon 3x3"};
+          this.el.pieceLabel.textContent = `Terrain: ${names[this.state.terrainType] || "Block"} | Rotation: ${this.state.rot} deg`;
+          return;
+        }
+        if(this.state.tool === "tree"){
+          const treeNames = {pine: "Pine", round: "Round", autumn: "Autumn"};
+          this.el.pieceLabel.textContent = `Tree: ${treeNames[this.state.treeType] || "Pine"} | Rotation: n/a`;
+          return;
+        }
+        if(this.state.tool === "animal"){
+          const animalNames = {cow: "Cow", sheep: "Sheep", horse: "Horse"};
+          this.el.pieceLabel.textContent = `Animal: ${animalNames[this.state.animalType] || "Cow"} | Roaming: on`;
+          return;
+        }
+        const names = {
+          straight: "Straight",
+          curve: "Curved Track",
+          curve_r: "Curved Track",
+          curve_l: "Curved Track",
+          slope: "Slope Track",
+          fork: "Fork Switch",
+          cross: "4-Way"
+        };
+        const name = names[this.state.trackType] || "Track";
+        this.el.pieceLabel.textContent = `Track: ${name} | Rotation: ${this.state.rot} deg`;
+      }
+      _buildBoard(){
+        if(this.baseG) this.world.remove(this.baseG);
+        this.baseG = new THREE.Group();
+        this.world.add(this.baseG);
+        const w = this.state.board * TILE;
+        this.boardWorld = w;
+        const base = new THREE.Mesh(new THREE.BoxGeometry(w, 0.36, w), new THREE.MeshStandardMaterial({color: 0x4c8e53, roughness: 0.62, metalness: 0.02}));
+        base.position.y = -0.18;
+        base.receiveShadow = true;
+        base.castShadow = true;
+        this.baseG.add(base);
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.36, 0.06, w + 0.36), new THREE.MeshStandardMaterial({color: 0x2f5f37, roughness: 0.76, metalness: 0.02}));
+        rim.position.y = 0.01;
+        rim.receiveShadow = true;
+        this.baseG.add(rim);
+        this.grid = new THREE.GridHelper(w, this.state.board, 0x2f6e57, 0x79a68f);
+        this.grid.position.y = 0.04;
+        this.grid.material.transparent = true;
+        this.grid.material.opacity = 0.42;
+        this.baseG.add(this.grid);
+        this.hitPlane = new THREE.Mesh(new THREE.PlaneGeometry(w, w), new THREE.MeshBasicMaterial({transparent: true, opacity: 0.001, depthWrite: false}));
+        this.hitPlane.rotation.x = -Math.PI / 2;
+        this.hitPlane.position.y = 0.002;
+        this.baseG.add(this.hitPlane);
+      }
+      _hideGhosts(){
+        if(this.ghostBlock) this.ghostBlock.visible = false;
+        if(this.ghostTrack) this.ghostTrack.visible = false;
+        if(this.ghostTree) this.ghostTree.visible = false;
+        if(this.ghostAnimal) this.ghostAnimal.visible = false;
+        if(this.ghostTrain) this.ghostTrain.visible = false;
+        this.snapG.clear();
+        this.el.lockWrap.classList.remove("show");
+      }
+      _refreshHover(){
+        if(!this.pointer.inside){
+          this._hideGhosts();
+          this.hoverCell = null;
+          this.hoverBlockCandidate = null;
+          this.hoverTrackCandidate = null;
+          this.hoverTreeCandidate = null;
+          this.hoverAnimalCandidate = null;
+          this.hoverTrainCandidate = null;
+          return;
+        }
+        const cell = this._pickCell();
+        this.hoverCell = cell;
+        this.hoverBlockCandidate = null;
+        this.hoverTrackCandidate = null;
+        this.hoverTreeCandidate = null;
+        this.hoverAnimalCandidate = null;
+        this.hoverTrainCandidate = null;
+        this.snapG.clear();
+        this.el.lockWrap.classList.remove("show");
+        if(this.ghostBlock) this.ghostBlock.visible = false;
+        if(this.ghostTrack) this.ghostTrack.visible = false;
+        if(this.ghostTree) this.ghostTree.visible = false;
+        if(this.ghostAnimal) this.ghostAnimal.visible = false;
+        if(this.ghostTrain) this.ghostTrain.visible = false;
+        if(!cell) return;
+        if(this.state.tool === "block"){
+          const cand = this._validateBlockCandidate(cell.x, cell.z, this.state.terrainType);
+          this.hoverBlockCandidate = cand;
+          const p = this._cellCenter(cell.x, cell.z);
+          let y = TRACK_Y;
+          if(this.state.terrainType === "mountain"){
+            y = TRACK_Y;
+          }else if(this.state.terrainType === "arch"){
+            const track = this._trackAt(cell.x, cell.z);
+            y = track ? (TRACK_Y + track.h * BLOCK_H) : TRACK_Y;
+          }else if(this.state.terrainType === "pond"){
+            y = TRACK_Y;
+          }else{
+            y = this._nextBlockCenterY(cell.x, cell.z);
+          }
+          this.ghostBlock.position.set(p.x, y, p.z);
+          const blockRot = ((this.state.terrainType === "arch" || this.state.terrainType === "pond") && cand && Number.isFinite(cand.rot)) ? cand.rot : this.state.rot;
+          this.ghostBlock.rotation.y = THREE.MathUtils.degToRad(blockRot);
+          this._tintGhost(this.ghostBlock, cand.valid ? 0x6ee89f : 0xff6a6a, cand.valid ? 0.55 : 0.45);
+          this.ghostBlock.visible = true;
+          return;
+        }
+        if(this.state.tool === "track"){
+          const resolved = this._resolveTrackPlacement(cell.x, cell.z, this.state.trackType, this.state.rot);
+          const cand = resolved.cand;
+          this.hoverTrackCandidate = {valid: cand.valid, matchedDirs: cand.matchedDirs, mismatch: cand.mismatch, rot: resolved.rot, auto: resolved.auto};
+          const p = this._cellCenter(cell.x, cell.z);
+          const gh = this._tileHeight(cell.x, cell.z);
+          let gy = TRACK_Y + gh * BLOCK_H;
+          if(this.state.trackType === "slope") gy += BLOCK_H * 0.5;
+          this.ghostTrack.position.set(p.x, gy, p.z);
+          this.ghostTrack.rotation.y = THREE.MathUtils.degToRad(resolved.rot);
+          this._tintGhost(this.ghostTrack, cand.valid ? 0x6ee89f : 0xff6a6a, cand.valid ? 0.55 : 0.45);
+          this.ghostTrack.visible = true;
+          if(cand.valid && cand.matchedDirs.length){
+            this.el.lockLabel.textContent = `${cand.matchedDirs.length} interlock${cand.matchedDirs.length === 1 ? "" : "s"}`;
+            this.el.lockWrap.classList.add("show");
+            this._showSnapMarkers(cell, cand.matchedDirs);
+          }
+          return;
+        }
+        if(this.state.tool === "tree"){
+          const blocked = !!(this._trackAt(cell.x, cell.z) || this._treeAt(cell.x, cell.z) || this._pondAt(cell.x, cell.z) || this._animalAtCell(cell.x, cell.z) || this.mountainCellIndex.has(keyOf(cell.x, cell.z)));
+          this.hoverTreeCandidate = {valid: !blocked};
+          const p = this._cellCenter(cell.x, cell.z);
+          this.ghostTree.position.set(p.x, TRACK_Y + this._tileHeight(cell.x, cell.z) * BLOCK_H, p.z);
+          this._tintGhost(this.ghostTree, blocked ? 0xff6a6a : 0x6ee89f, blocked ? 0.45 : 0.56);
+          this.ghostTree.visible = true;
+          return;
+        }
+        if(this.state.tool === "animal"){
+          const valid = this._animalCanStand(cell.x, cell.z, this.state.animalType);
+          this.hoverAnimalCandidate = valid ? {x: cell.x, z: cell.z} : null;
+          const p = this._cellCenter(cell.x, cell.z);
+          this.ghostAnimal.position.set(p.x, TRACK_Y + 0.04, p.z);
+          this._tintGhost(this.ghostAnimal, valid ? 0x6ee89f : 0xff6a6a, valid ? 0.56 : 0.45);
+          this.ghostAnimal.visible = true;
+          return;
+        }
+        if(this.state.tool === "train"){
+          const track = this._trackAt(cell.x, cell.z);
+          const dir = rotateDir("N", rotSteps(this.state.rot));
+          const valid = !!(track && track.connectors.has(dir));
+          this.hoverTrainCandidate = valid ? {x: cell.x, z: cell.z, dir} : null;
+          if(track){
+            const p = this._cellCenter(cell.x, cell.z);
+            this.ghostTrain.position.set(p.x, this._trackCenterY(track), p.z);
+            this.ghostTrain.rotation.y = yawForDir(dir);
+            this._tintGhostTrain(valid);
+            this.ghostTrain.visible = true;
+          }
+        }
+      }
+      _handleClick(){
+        const forkKey = this._pickForkToggle();
+        if(forkKey){
+          this._toggleFork(forkKey);
+          this._refreshHover();
+          return;
+        }
+        if(this.state.tool === "block"){
+          if(!this.hoverCell || !this.hoverBlockCandidate || !this.hoverBlockCandidate.valid){
+            this._msg("Cannot place terrain here");
+            return;
+          }
+          if(this.state.terrainType === "mountain"){
+            if(this._placeMountain(this.hoverCell.x, this.hoverCell.z, this.state.rot)) this._msg("Canyon placed");
+            else this._msg("Canyon needs a clear 3x3 area");
+          }else if(this.state.terrainType === "arch"){
+            if(this._placeArch(this.hoverCell.x, this.hoverCell.z)) this._msg("Arch placed");
+            else this._msg("Arch must be placed over straight, curved, or slope track");
+          }else if(this.state.terrainType === "pond"){
+            if(this._placePond(this.hoverCell.x, this.hoverCell.z)) this._msg("Pond placed");
+            else this._msg("Pond needs an open ground tile");
+          }else{
+            if(this._placeBlock(this.hoverCell.x, this.hoverCell.z, this.state.terrainType)) this._msg("Terrain block placed");
+            else this._msg("Cannot stack block here");
+          }
+          this._refreshHover();
+          return;
+        }
+        if(this.state.tool === "track"){
+          if(this.hoverTrackCandidate && this.hoverTrackCandidate.valid){
+            const useRot = Number.isFinite(this.hoverTrackCandidate.rot) ? this.hoverTrackCandidate.rot : this.state.rot;
+            this._placeTrack(this.hoverCell.x, this.hoverCell.z, this.state.trackType, useRot);
+            if(this.hoverTrackCandidate.auto) this._msg(`Track placed (auto-rotated to ${useRot} deg)`);
+            else this._msg("Track placed");
+            this._refreshHover();
+          }else{
+            this._msg("Invalid track join");
+          }
+          return;
+        }
+        if(this.state.tool === "tree"){
+          if(!this.hoverCell || !this.hoverTreeCandidate || !this.hoverTreeCandidate.valid){
+            this._msg("Tree needs an empty tile");
+            return;
+          }
+          this._placeTree(this.hoverCell.x, this.hoverCell.z, this.state.treeType);
+          this._msg("Tree placed");
+          this._refreshHover();
+          return;
+        }
+        if(this.state.tool === "erase"){
+          if(!this.hoverCell) return;
+          if(this._removeAnimalAtCell(this.hoverCell.x, this.hoverCell.z)){
+            this._msg("Animal removed");
+            this._refreshHover();
+            return;
+          }
+          if(this._removePond(this.hoverCell.x, this.hoverCell.z)){
+            this._msg("Pond removed");
+            this._refreshHover();
+            return;
+          }
+          if(this._removeBlock(this.hoverCell.x, this.hoverCell.z)){
+            this._msg("Terrain removed");
+            this._refreshHover();
+            return;
+          }
+          if(this._removeArch(this.hoverCell.x, this.hoverCell.z)){
+            this._msg("Arch removed");
+            this._refreshHover();
+            return;
+          }
+          const piece = this._trackAt(this.hoverCell.x, this.hoverCell.z);
+          if(piece){
+            this._removeTrack(this.hoverCell.x, this.hoverCell.z);
+            this._msg("Track removed");
+            this._refreshHover();
+            return;
+          }
+          const tree = this._treeAt(this.hoverCell.x, this.hoverCell.z);
+          if(tree){
+            this._removeTree(this.hoverCell.x, this.hoverCell.z);
+            this._msg("Tree removed");
+            this._refreshHover();
+            return;
+          }
+          if(this._removeMountainAtCell(this.hoverCell.x, this.hoverCell.z)){
+            this._msg("Canyon removed");
+            this._refreshHover();
+            return;
+          }
+          this._msg("No removable object on this tile");
+          this._refreshHover();
+          return;
+        }
+        if(this.state.tool === "animal"){
+          if(!this.hoverAnimalCandidate){ this._msg("Animal cannot stand there"); return; }
+          this._spawnAnimal(this.hoverAnimalCandidate.x, this.hoverAnimalCandidate.z, this.state.animalType);
+          this._msg(`${this.state.animalType[0].toUpperCase()}${this.state.animalType.slice(1)} placed`);
+          this._refreshHover();
+          return;
+        }
+        if(this.state.tool === "train"){
+          if(!this.hoverTrainCandidate){ this._msg("Place trains on a valid track direction"); return; }
+          this._spawnTrain(this.hoverTrainCandidate);
+          this._refreshHover();
+        }
+      }
+      _placeTrack(x, z, type, rot){
+        if(type === "curve" || type === "curve_r") type = "curve_l";
+        const k = keyOf(x, z);
+        if(this.tracks.has(k)) return;
+        if(this._treeAt(x, z) || this._pondAt(x, z) || this._animalAtCell(x, z)) return;
+        const mesh = this._makeTrackMesh(type, false);
+        const p = this._cellCenter(x, z);
+        const h = this._tileHeight(x, z);
+        let py = TRACK_Y + h * BLOCK_H;
+        if(type === "slope") py += BLOCK_H * 0.5;
+        mesh.position.set(p.x, py, p.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(rot);
+        this.trackG.add(mesh);
+        const track = {id: this.nextTrackId++, x, z, h, type, rot, connectors: connectorsFor(type, rot), mesh};
+        if(type === "fork") track.switchTo = "right";
+        this.tracks.set(k, track);
+        if(type === "fork"){
+          this._registerForkToggle(track, k);
+          this._updateForkVisual(track);
+        }
+        this._updateHud();
+      }
+      _removeTrack(x, z){
+        const k = keyOf(x, z);
+        const t = this.tracks.get(k);
+        if(!t) return;
+        this._removeArch(x, z);
+        this.trackG.remove(t.mesh);
+        this.tracks.delete(k);
+        this._updateHud();
+      }
+      _trackAt(x, z){
+        const real = this.tracks.get(keyOf(x, z));
+        if(real) return real;
+        return this._canyonTrackAt(x, z);
+      }
+      _canyonTrackAt(x, z){
+        const centerKey = this.mountainCellIndex.get(keyOf(x, z));
+        if(!centerKey) return null;
+        const m = this.mountains.get(centerKey);
+        if(!m) return null;
+        if(m.axis === "ns"){
+          if(x !== m.cx || z < m.cz - 1 || z > m.cz + 1) return null;
+          return {id: `canyon-${centerKey}-${x},${z}`, x, z, h: 0, type: "straight", rot: 0, connectors: connectorsFor("straight", 0), virtual: true};
+        }
+        if(z !== m.cz || x < m.cx - 1 || x > m.cx + 1) return null;
+        return {id: `canyon-${centerKey}-${x},${z}`, x, z, h: 0, type: "straight", rot: 90, connectors: connectorsFor("straight", 90), virtual: true};
+      }
+      _archAt(x, z){ return this.arches.get(keyOf(x, z)) || null; }
+      _pondAt(x, z){ return this.ponds.get(keyOf(x, z)) || null; }
+      _treeAt(x, z){ return this.trees.get(keyOf(x, z)) || null; }
+      _animalAtCell(x, z){
+        for(const a of this.animals){
+          if(a.dead) continue;
+          const c = this._worldToCell(a.mesh.position.x, a.mesh.position.z);
+          if(c && c.x === x && c.z === z) return a;
+        }
+        return null;
+      }
+      _blocksAt(x, z){ return this.blocks.get(keyOf(x, z)) || []; }
+      _tileHeight(x, z){ return this._blocksAt(x, z).length; }
+      _nextBlockCenterY(x, z){
+        const stack = this._blocksAt(x, z);
+        const arch = this._archAt(x, z);
+        const track = this._trackAt(x, z);
+        if(arch && track){
+          const foundation = Math.min(stack.length, Math.max(0, Math.floor(track.h || 0)));
+          const aboveCount = Math.max(0, stack.length - foundation);
+          const units = foundation + ARCH_STACK_BASE_UNITS + aboveCount;
+          return TRACK_Y + units * BLOCK_H + BLOCK_H * 0.5;
+        }
+        return TRACK_Y + stack.length * BLOCK_H + BLOCK_H * 0.5;
+      }
+      _animalCanStand(x, z, type = "cow", ignoreId = null){
+        if(x < 0 || z < 0 || x >= this.state.board || z >= this.state.board) return false;
+        if(this._archAt(x, z) || this._pondAt(x, z) || this._treeAt(x, z) || this.mountainCellIndex.has(keyOf(x, z))) return false;
+        const track = this._trackAt(x, z);
+        if(track){
+          // Cows and sheep can both cross flat tracks.
+          const flatTrackOk = track.type !== "slope" && (track.h || 0) === 0;
+          if(!flatTrackOk) return false;
+        }
+        if(this._tileHeight(x, z) !== 0) return false;
+        for(const a of this.animals){
+          if(a.dead || a.id === ignoreId) continue;
+          const c = this._worldToCell(a.mesh.position.x, a.mesh.position.z);
+          if(c && c.x === x && c.z === z) return false;
+        }
+        return true;
+      }
+      _connectorHeight(piece, dir){
+        const h = piece.h || 0;
+        if(piece.type === "slope"){
+          const s = -rotSteps(piece.rot);
+          const low = rotateDir("S", s);
+          const high = rotateDir("N", s);
+          if(dir === high) return h + 1;
+          if(dir === low) return h;
+        }
+        return h;
+      }
+      _trackCenterY(piece){
+        if(!piece) return TRAIN_Y;
+        const base = TRACK_Y + piece.h * BLOCK_H;
+        return (piece.type === "slope" ? base + BLOCK_H * 0.5 + 0.13 : base) + TRAIN_Y;
+      }
+      _validateBlockCandidate(x, z, terrainType){
+        if(x < 0 || z < 0 || x >= this.state.board || z >= this.state.board) return {valid: false};
+        if(terrainType === "arch"){
+          const archTracks = new Set(["straight", "curve", "curve_r", "curve_l", "slope"]);
+          const k = keyOf(x, z);
+          const track = this._trackAt(x, z);
+          const valid = !!(
+            track &&
+            archTracks.has(track.type) &&
+            !this._treeAt(x, z) &&
+            !this._pondAt(x, z) &&
+            !this._animalAtCell(x, z) &&
+            !this.mountainCellIndex.has(k) &&
+            !this.arches.has(k)
+          );
+          return {valid, rot: track ? track.rot : this.state.rot};
+        }
+        if(terrainType === "pond"){
+          const k = keyOf(x, z);
+          const valid = !!(
+            this._tileHeight(x, z) === 0 &&
+            !this._trackAt(x, z) &&
+            !this._treeAt(x, z) &&
+            !this._archAt(x, z) &&
+            !this._pondAt(x, z) &&
+            !this._animalAtCell(x, z) &&
+            !this.mountainCellIndex.has(k)
+          );
+          return {valid, rot: 0};
+        }
+        if(terrainType === "mountain"){
+          if(x < 1 || z < 1 || x > this.state.board - 2 || z > this.state.board - 2) return {valid: false};
+          for(let dx = -1; dx <= 1; dx++){
+            for(let dz = -1; dz <= 1; dz++){
+              const cx = x + dx, cz = z + dz;
+              if(this.mountainCellIndex.has(keyOf(cx, cz))) return {valid: false};
+              if(this._trackAt(cx, cz) || this._archAt(cx, cz) || this._treeAt(cx, cz) || this._pondAt(cx, cz) || this._animalAtCell(cx, cz)) return {valid: false};
+              if(this._tileHeight(cx, cz) > 0) return {valid: false};
+            }
+          }
+          return {valid: true};
+        }
+        const k = keyOf(x, z);
+        if(this.mountainCellIndex.has(k)) return {valid: false};
+        if(this._treeAt(x, z) || this._pondAt(x, z) || this._animalAtCell(x, z)) return {valid: false};
+        const track = this._trackAt(x, z);
+        const arch = this._archAt(x, z);
+        if(track && !arch) return {valid: false};
+        const stack = this._blocksAt(x, z);
+        if(arch) return {valid: true};
+        return {valid: stack.length < 18};
+      }
+      _placeBlock(x, z, type){
+        const track = this._trackAt(x, z);
+        const arch = this._archAt(x, z);
+        if((track && !arch) || this._treeAt(x, z) || this._pondAt(x, z) || this._animalAtCell(x, z) || this.mountainCellIndex.has(keyOf(x, z))) return false;
+        const k = keyOf(x, z);
+        const stack = this.blocks.get(k) || [];
+        if(!arch && stack.length >= 18) return false;
+        const mesh = this._makeTerrainBlockMesh(type, false);
+        const p = this._cellCenter(x, z);
+        mesh.position.set(p.x, this._nextBlockCenterY(x, z), p.z);
+        if(type === "slope") mesh.rotation.y = THREE.MathUtils.degToRad(this.state.rot);
+        this.blockG.add(mesh);
+        stack.push({type, rot: this.state.rot, mesh});
+        this.blocks.set(k, stack);
+        this._updateHud();
+        return true;
+      }
+      _removeBlock(x, z){
+        const k = keyOf(x, z);
+        const track = this._trackAt(x, z);
+        const arch = this._archAt(x, z);
+        if(this._treeAt(x, z) || this._pondAt(x, z)) return false;
+        if(track && !arch) return false;
+        const stack = this.blocks.get(k);
+        if(!stack || !stack.length) return false;
+        if(track && arch){
+          const minKeep = Math.max(0, Math.floor(track.h || 0));
+          if(stack.length <= minKeep) return false;
+        }
+        const top = stack.pop();
+        this.blockG.remove(top.mesh);
+        if(!stack.length) this.blocks.delete(k);
+        this._updateHud();
+        return true;
+      }
+      _placeMountain(cx, cz, rot){
+        const valid = this._validateBlockCandidate(cx, cz, "mountain");
+        if(!valid.valid) return false;
+        const axis = (rotSteps(rot) % 2 === 0) ? "ns" : "ew";
+        const mesh = this._makeMountainMesh(axis, false);
+        const p = this._cellCenter(cx, cz);
+        mesh.position.set(p.x, TRACK_Y, p.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(rot);
+        this.mountainG.add(mesh);
+        const key = keyOf(cx, cz);
+        const cells = [];
+        for(let dx = -1; dx <= 1; dx++){
+          for(let dz = -1; dz <= 1; dz++){
+            const ck = keyOf(cx + dx, cz + dz);
+            cells.push(ck);
+            this.mountainCellIndex.set(ck, key);
+          }
+        }
+        this.mountains.set(key, {cx, cz, axis, rot, mesh, cells, tunnel: false});
+        this._updateHud();
+        return true;
+      }
+      _removeMountainAtCell(x, z){
+        const centerKey = this.mountainCellIndex.get(keyOf(x, z));
+        if(!centerKey) return false;
+        const m = this.mountains.get(centerKey);
+        if(!m) return false;
+        this.mountainG.remove(m.mesh);
+        m.cells.forEach((ck) => this.mountainCellIndex.delete(ck));
+        this.mountains.delete(centerKey);
+        this._updateHud();
+        return true;
+      }
+      _mountainAtCenterCell(x, z){
+        return this.mountains.get(keyOf(x, z)) || null;
+      }
+      _placeArch(x, z){
+        const cand = this._validateBlockCandidate(x, z, "arch");
+        if(!cand.valid) return false;
+        const track = this._trackAt(x, z);
+        if(!track) return false;
+        const mesh = this._makeArchMesh(false);
+        const p = this._cellCenter(x, z);
+        mesh.position.set(p.x, TRACK_Y + track.h * BLOCK_H, p.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(track.rot);
+        this.archG.add(mesh);
+        this.arches.set(keyOf(x, z), {x, z, rot: track.rot, mesh});
+        this._updateHud();
+        return true;
+      }
+      _removeArch(x, z){
+        const k = keyOf(x, z);
+        const arch = this.arches.get(k);
+        if(!arch) return false;
+        this.archG.remove(arch.mesh);
+        this.arches.delete(k);
+        this._updateHud();
+        return true;
+      }
+      _placePond(x, z){
+        const cand = this._validateBlockCandidate(x, z, "pond");
+        if(!cand.valid) return false;
+        const k = keyOf(x, z);
+        const mesh = this._makePondMesh(false);
+        const p = this._cellCenter(x, z);
+        mesh.position.set(p.x, TRACK_Y, p.z);
+        this.pondG.add(mesh);
+        this.ponds.set(k, {x, z, mesh});
+        this._updateHud();
+        return true;
+      }
+      _removePond(x, z){
+        const k = keyOf(x, z);
+        const pond = this.ponds.get(k);
+        if(!pond) return false;
+        this.pondG.remove(pond.mesh);
+        this.ponds.delete(k);
+        this._updateHud();
+        return true;
+      }
+      _placeTree(x, z, type){
+        const k = keyOf(x, z);
+        if(this._trackAt(x, z) || this._treeAt(x, z) || this._pondAt(x, z) || this._animalAtCell(x, z) || this.mountainCellIndex.has(k)) return;
+        const mesh = this._makeTreeMesh(type, false);
+        const p = this._cellCenter(x, z);
+        mesh.position.set(p.x, TRACK_Y + this._tileHeight(x, z) * BLOCK_H, p.z);
+        this.treeG.add(mesh);
+        this.trees.set(k, {x, z, type, mesh});
+        this._updateHud();
+      }
+      _removeTree(x, z){
+        const k = keyOf(x, z);
+        const t = this.trees.get(k);
+        if(!t) return;
+        this.treeG.remove(t.mesh);
+        this.trees.delete(k);
+        this._updateHud();
+      }
+      _spawnAnimal(x, z, type){
+        if(!this._animalCanStand(x, z, type)) return false;
+        const mesh = this._makeAnimalMesh(type, false);
+        const p = this._cellCenter(x, z);
+        mesh.position.set(p.x, TRACK_Y + 0.04, p.z);
+        const heading = Math.random() * Math.PI * 2;
+        mesh.rotation.y = heading;
+        this.animalG.add(mesh);
+        this.animals.push({
+          id: this.nextAnimalId++,
+          type,
+          mesh,
+          speed: 0.64 + Math.random() * 0.34,
+          heading,
+          turnTimer: 0.6 + Math.random() * 1.8,
+          dead: false
+        });
+        this._updateHud();
+        return true;
+      }
+      _removeAnimalAtCell(x, z){
+        for(let i = 0; i < this.animals.length; i++){
+          const a = this.animals[i];
+          const c = this._worldToCell(a.mesh.position.x, a.mesh.position.z);
+          if(c && c.x === x && c.z === z){
+            this.animalG.remove(a.mesh);
+            this.animals.splice(i, 1);
+            this._updateHud();
+            return true;
+          }
+        }
+        return false;
+      }
+      _updateAnimals(dt){
+        if(!this.animals.length) return;
+        for(const a of this.animals){
+          if(a.dead) continue;
+          a.turnTimer -= dt;
+          if(a.turnTimer <= 0){
+            let delta = (Math.random() - 0.5) * 0.9;
+            if(Math.random() < 0.34) delta += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2);
+            a.heading += delta;
+            a.turnTimer = 0.7 + Math.random() * 1.8;
+          }
+          const dir = new THREE.Vector3(Math.sin(a.heading), 0, Math.cos(a.heading));
+          const step = a.speed * dt;
+          const prev = a.mesh.position.clone();
+          const prevCell = this._worldToCell(prev.x, prev.z);
+          const next = prev.clone().addScaledVector(dir, step);
+          const nextCell = this._worldToCell(next.x, next.z);
+          const canStep = !!(
+            nextCell &&
+            (
+              (prevCell && nextCell.x === prevCell.x && nextCell.z === prevCell.z) ||
+              this._animalCanStand(nextCell.x, nextCell.z, a.type, a.id)
+            )
+          );
+          if(canStep){
+            a.mesh.position.copy(next);
+            a.mesh.position.y = TRACK_Y + 0.04;
+          }else{
+            a.mesh.position.copy(prev);
+            a.heading += (Math.random() < 0.5 ? -1 : 1) * (Math.PI * (0.42 + Math.random() * 0.35));
+            a.turnTimer = 0.2 + Math.random() * 0.7;
+          }
+          const yaw = a.heading;
+          let dy = yaw - a.mesh.rotation.y;
+          dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+          a.mesh.rotation.y += dy * Math.min(1, dt * 6.5);
+        }
+      }
+      _validateTrackCandidate(x, z, type, rot){
+        const out = {valid: false, matchedDirs: [], mismatch: 0};
+        if(x < 0 || z < 0 || x >= this.state.board || z >= this.state.board) return out;
+        if(this._trackAt(x, z)) return out;
+        if(this._treeAt(x, z) || this._pondAt(x, z) || this._animalAtCell(x, z)) return out;
+        const h = this._tileHeight(x, z);
+        const candPiece = {x, z, h, type, rot, connectors: connectorsFor(type, rot)};
+        const c = connectorsFor(type, rot);
+        let neighbors = 0;
+        let sameLevelNeighbors = 0;
+        let mismatches = 0;
+        const matchedDirs = [];
+        for(const dir of DIRS){
+          const d = DIR_STEP[dir];
+          const n = this._trackAt(x + d.x, z + d.z);
+          if(!n) continue;
+          neighbors += 1;
+          const hasThis = c.has(dir);
+          const hasNei = n.connectors.has(OPP[dir]);
+          const thisH = this._connectorHeight(candPiece, dir);
+          const neiH = this._connectorHeight(n, OPP[dir]);
+          const sameLevel = thisH === neiH;
+          if(!sameLevel){
+            // Different elevations are allowed to be adjacent without forced interlock.
+            continue;
+          }
+          sameLevelNeighbors += 1;
+          if(hasThis && hasNei) matchedDirs.push(dir);
+          else if(hasThis !== hasNei) mismatches += 1;
+        }
+        out.matchedDirs = matchedDirs;
+        out.mismatch = mismatches;
+        out.valid = (mismatches === 0) && (neighbors === 0 || matchedDirs.length > 0 || sameLevelNeighbors === 0);
+        return out;
+      }
+      _resolveTrackPlacement(x, z, type, preferredRot){
+        const direct = this._validateTrackCandidate(x, z, type, preferredRot);
+        if(direct.valid) return {rot: preferredRot, cand: direct, auto: false};
+        let best = null;
+        const rots = [0, 90, 180, 270];
+        for(const rot of rots){
+          const cand = this._validateTrackCandidate(x, z, type, rot);
+          if(!cand.valid) continue;
+          const delta = ((rot - preferredRot + 360) % 360);
+          const diff = Math.min(delta, 360 - delta);
+          const score = cand.matchedDirs.length * 100 - diff;
+          if(!best || score > best.score){
+            best = {rot, cand, score};
+          }
+        }
+        if(best) return {rot: best.rot, cand: best.cand, auto: true};
+        return {rot: preferredRot, cand: direct, auto: false};
+      }
+      _forkDirs(rot){
+        const s = -rotSteps(rot);
+        return {trunk: rotateDir("S", s), left: rotateDir("W", s), right: rotateDir("E", s)};
+      }
+      _forkExit(piece, entry){
+        const dirs = this._forkDirs(piece.rot);
+        if(entry === dirs.trunk) return piece.switchTo === "left" ? dirs.left : dirs.right;
+        if(entry === dirs.left || entry === dirs.right) return dirs.trunk;
+        return null;
+      }
+      _registerForkToggle(track, key){
+        const toggle = track.mesh.getObjectByName("forkToggle");
+        if(!toggle) return;
+        toggle.traverse((n) => {
+          if(n.isMesh){
+            n.userData.forkKey = key;
+            n.userData.forkToggle = true;
+          }
+        });
+      }
+      _updateForkVisual(track){
+        if(!track || track.type !== "fork") return;
+        const toggle = track.mesh.getObjectByName("forkToggle");
+        if(!toggle) return;
+        const arm = toggle.getObjectByName("forkHandle");
+        if(arm){
+          const toLeft = track.switchTo === "left";
+          arm.rotation.y = toLeft ? 0.65 : -0.65;
+          arm.material.color.setHex(toLeft ? 0xd08b2f : 0x2ebf64);
+        }
+      }
+      _pickForkToggle(){
+        this.ray.setFromCamera(this.pointer.ndc, this.camera);
+        const hits = this.ray.intersectObject(this.trackG, true);
+        for(const hit of hits){
+          let n = hit.object;
+          while(n){
+            if(n.userData && n.userData.forkToggle && n.userData.forkKey) return n.userData.forkKey;
+            n = n.parent;
+          }
+        }
+        return null;
+      }
+      _toggleFork(key){
+        const piece = this.tracks.get(key);
+        if(!piece || piece.type !== "fork") return;
+        piece.switchTo = piece.switchTo === "left" ? "right" : "left";
+        this._updateForkVisual(piece);
+        this._msg(`Fork set to ${piece.switchTo}`);
+      }
+      _cellCenter(x, z){
+        const half = this.state.board / 2;
+        return new THREE.Vector3((x + 0.5 - half) * TILE, 0, (z + 0.5 - half) * TILE);
+      }
+      _worldToCell(wx, wz){
+        const half = this.state.board / 2;
+        const x = Math.floor(wx / TILE + half);
+        const z = Math.floor(wz / TILE + half);
+        if(x < 0 || z < 0 || x >= this.state.board || z >= this.state.board) return null;
+        return {x, z};
+      }
+      _pickCell(){
+        this.ray.setFromCamera(this.pointer.ndc, this.camera);
+        const hits = this.ray.intersectObject(this.hitPlane, false);
+        if(!hits.length) return null;
+        return this._worldToCell(hits[0].point.x, hits[0].point.z);
+      }
+      _showSnapMarkers(cell, dirs){
+        this.snapG.clear();
+        const geo = new THREE.TorusGeometry(0.14, 0.05, 10, 20);
+        const mat = new THREE.MeshStandardMaterial({color: 0x2dc270, emissive: 0x194f32, emissiveIntensity: 0.35});
+        const c = this._cellCenter(cell.x, cell.z);
+        dirs.forEach((dir) => {
+          const m = new THREE.Mesh(geo, mat);
+          m.rotation.x = Math.PI / 2;
+          m.position.set(c.x + DIR_STEP[dir].x * TILE * 0.49, 0.22, c.z + DIR_STEP[dir].z * TILE * 0.49);
+          this.snapG.add(m);
+        });
+      }
+      _rebuildGhostTrack(){
+        if(this.ghostTrack) this.ghostG.remove(this.ghostTrack);
+        this.ghostTrack = this._makeTrackMesh(this.state.trackType, true);
+        this.ghostTrack.visible = false;
+        this.ghostG.add(this.ghostTrack);
+      }
+      _rebuildGhostBlock(){
+        if(this.ghostBlock) this.ghostG.remove(this.ghostBlock);
+        if(this.state.terrainType === "mountain") this.ghostBlock = this._makeMountainMesh("ns", true);
+        else if(this.state.terrainType === "arch") this.ghostBlock = this._makeArchMesh(true);
+        else if(this.state.terrainType === "pond") this.ghostBlock = this._makePondMesh(true);
+        else this.ghostBlock = this._makeTerrainBlockMesh(this.state.terrainType, true);
+        this.ghostBlock.visible = false;
+        this.ghostG.add(this.ghostBlock);
+      }
+      _rebuildGhostTree(){
+        if(this.ghostTree) this.ghostG.remove(this.ghostTree);
+        this.ghostTree = this._makeTreeMesh(this.state.treeType, true);
+        this.ghostTree.visible = false;
+        this.ghostG.add(this.ghostTree);
+      }
+      _rebuildGhostAnimal(){
+        if(this.ghostAnimal) this.ghostG.remove(this.ghostAnimal);
+        this.ghostAnimal = this._makeAnimalMesh(this.state.animalType, true);
+        this.ghostAnimal.visible = false;
+        this.ghostG.add(this.ghostAnimal);
+      }
+      _rebuildGhostTrain(){
+        if(this.ghostTrain) this.ghostG.remove(this.ghostTrain);
+        const root = new THREE.Group();
+        const loco = this._makeLocomotive(this.state.style, this.state.color, true);
+        root.add(loco);
+        const spacing = 1.35;
+        for(let i = 0; i < this.state.carts; i++){
+          const cart = this._makeCart(this.state.color, true);
+          cart.position.z = -(i + 1) * spacing;
+          root.add(cart);
+        }
+        root.visible = false;
+        this.ghostTrain = root;
+        this.ghostG.add(root);
+      }
+      _tintGhost(group, color, opacity){
+        group.traverse((o) => {
+          if(o.isMesh){
+            o.material.color.setHex(color);
+            o.material.opacity = opacity;
+            o.material.transparent = true;
+            o.material.depthWrite = false;
+          }
+        });
+      }
+      _tintGhostTrain(valid){
+        const base = new THREE.Color(valid ? this.state.color : 0xff6a6a);
+        if(valid) base.lerp(new THREE.Color(0xffffff), 0.2);
+        this.ghostTrain.traverse((o) => {
+          if(o.isMesh){
+            o.material.color.copy(base);
+            o.material.opacity = valid ? 0.54 : 0.44;
+            o.material.transparent = true;
+            o.material.depthWrite = false;
+          }
+        });
+      }
+      _mesh(geo, mat, x = 0, y = 0, z = 0, ry = 0){
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z);
+        m.rotation.y = ry;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        return m;
+      }
+      _makeTrackMesh(type, ghost){
+        const g = new THREE.Group();
+        const bedMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x8a6948, roughness: 0.76, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const railMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0xb6bdc7, roughness: 0.36, metalness: 0.65, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const tieMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x4f3b2b, roughness: 0.82, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const joinMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x1d2128, roughness: 0.46, metalness: 0.46, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        if(type !== "slope") g.add(this._mesh(new THREE.BoxGeometry(TILE * 0.9, 0.14, TILE * 0.9), bedMat, 0, 0.07, 0));
+        const tieGeo = new THREE.BoxGeometry(0.85, 0.08, 0.14);
+        const railGeo = new THREE.BoxGeometry(0.09, 0.13, TILE * 0.86);
+        const railShortGeo = new THREE.BoxGeometry(0.09, 0.13, 0.34);
+        if(type === "straight" || type === "cross"){
+          for(let i = -3; i <= 3; i++) g.add(this._mesh(tieGeo, tieMat, 0, 0.15, i * 0.39));
+          g.add(this._mesh(railGeo, railMat, -0.38, 0.2, 0));
+          g.add(this._mesh(railGeo, railMat, 0.38, 0.2, 0));
+        }
+        if(type === "curve" || type === "curve_r" || type === "curve_l"){
+          const c = TILE * 0.42;
+          const curveDefs = {
+            curve: {cx: c, cz: c, a0: Math.PI, a1: -Math.PI / 2},
+            curve_r: {cx: c, cz: c, a0: Math.PI, a1: -Math.PI / 2},
+            curve_l: {cx: -c, cz: c, a0: 0, a1: -Math.PI / 2}
+          };
+          const def = curveDefs[type] || curveDefs.curve_r;
+          const rMid = c;
+          const rA = rMid - 0.17;
+          const rB = rMid + 0.17;
+          for(let i = 0; i <= 13; i++){
+            const t = i / 13, a = def.a0 + t * (def.a1 - def.a0), rot = -a;
+            g.add(this._mesh(railShortGeo, railMat, def.cx + Math.cos(a) * rA, 0.2, def.cz + Math.sin(a) * rA, rot));
+            g.add(this._mesh(railShortGeo, railMat, def.cx + Math.cos(a) * rB, 0.2, def.cz + Math.sin(a) * rB, rot));
+          }
+          const tieCurve = new THREE.BoxGeometry(0.76, 0.08, 0.12);
+          for(let i = 0; i <= 9; i++){
+            const t = i / 9, a = def.a0 + t * (def.a1 - def.a0);
+            g.add(this._mesh(tieCurve, tieMat, def.cx + Math.cos(a) * rMid, 0.15, def.cz + Math.sin(a) * rMid, -a));
+          }
+        }
+        if(type === "slope"){
+          const slopeBed = new THREE.BoxGeometry(TILE * 0.9, BLOCK_H * 0.92, TILE * 0.9);
+          const p = slopeBed.attributes.position;
+          for(let i = 0; i < p.count; i++){
+            const y = p.getY(i);
+            if(y > 0){
+              const z = p.getZ(i);
+              const t = (TILE * 0.45 - z) / (TILE * 0.9);
+              p.setY(i, -BLOCK_H * 0.46 + t * BLOCK_H * 0.92);
+            }
+          }
+          p.needsUpdate = true;
+          slopeBed.computeVertexNormals();
+          const slopeMesh = this._mesh(slopeBed, bedMat, 0, BLOCK_H * 0.46, 0);
+          g.add(slopeMesh);
+          const segRail = new THREE.BoxGeometry(0.09, 0.13, 0.34);
+          const segCount = 9;
+          for(let i = 0; i < segCount; i++){
+            const t = i / (segCount - 1);
+            const z = -TILE * 0.4 + t * TILE * 0.8;
+            const y = 0.18 + (1 - t) * BLOCK_H * 0.88;
+            g.add(this._mesh(segRail, railMat, -0.32, y, z));
+            g.add(this._mesh(segRail, railMat, 0.32, y, z));
+            g.add(this._mesh(tieGeo, tieMat, 0, y - 0.05, z));
+          }
+        }
+        if(type === "fork"){
+          const railSouthGeo = new THREE.BoxGeometry(0.09, 0.13, TILE * 0.5);
+          g.add(this._mesh(railSouthGeo, railMat, -0.26, 0.2, TILE * 0.23));
+          g.add(this._mesh(railSouthGeo, railMat, 0.26, 0.2, TILE * 0.23));
+          const railAcrossGeo = new THREE.BoxGeometry(TILE * 0.56, 0.13, 0.09);
+          g.add(this._mesh(railAcrossGeo, railMat, 0, 0.2, -0.26));
+          g.add(this._mesh(railAcrossGeo, railMat, 0, 0.2, 0.26));
+          const railDiagGeo = new THREE.BoxGeometry(0.09, 0.13, 0.56);
+          g.add(this._mesh(railDiagGeo, railMat, -0.22, 0.2, -0.01, Math.PI / 4));
+          g.add(this._mesh(railDiagGeo, railMat, 0.22, 0.2, -0.01, -Math.PI / 4));
+          for(let i = 0; i <= 4; i++) g.add(this._mesh(tieGeo, tieMat, 0, 0.15, 0.06 + i * 0.24));
+          const tieGeo2 = new THREE.BoxGeometry(0.14, 0.08, 0.85);
+          for(let i = -2; i <= 2; i++) g.add(this._mesh(tieGeo2, tieMat, i * 0.32, 0.15, 0.01));
+          const toggle = new THREE.Group();
+          toggle.name = "forkToggle";
+          toggle.position.set(TILE * 0.57, 0.05, 0);
+          const plate = this._mesh(new THREE.BoxGeometry(0.52, 0.05, 0.52), bedMat, 0, 0.02, 0);
+          const post = this._mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 10), joinMat, 0, 0.11, 0);
+          const arm = this._mesh(new THREE.BoxGeometry(0.08, 0.07, 0.34), new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x2ebf64, roughness: 0.42, metalness: 0.2, transparent: ghost, opacity: ghost ? 0.52 : 1}), 0, 0.19, 0);
+          arm.name = "forkHandle";
+          toggle.add(plate, post, arm);
+          g.add(toggle);
+        }
+        if(type === "cross"){
+          const tieGeo2 = new THREE.BoxGeometry(0.14, 0.08, 0.85);
+          const railGeo2 = new THREE.BoxGeometry(TILE * 0.86, 0.13, 0.09);
+          for(let i = -3; i <= 3; i++) g.add(this._mesh(tieGeo2, tieMat, i * 0.39, 0.15, 0));
+          g.add(this._mesh(railGeo2, railMat, 0, 0.2, -0.38));
+          g.add(this._mesh(railGeo2, railMat, 0, 0.2, 0.38));
+        }
+        const connectors = connectorsFor(type, 0);
+        const joinGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.24, 12);
+        for(const dir of connectors){
+          let x = 0, z = 0, rx = 0, rz = 0;
+          if(dir === "N"){ z = -TILE * 0.47; rx = Math.PI / 2; }
+          if(dir === "S"){ z = TILE * 0.47; rx = Math.PI / 2; }
+          if(dir === "E"){ x = TILE * 0.47; rz = Math.PI / 2; }
+          if(dir === "W"){ x = -TILE * 0.47; rz = Math.PI / 2; }
+          const peg = this._mesh(joinGeo, joinMat, x, 0.15, z);
+          peg.rotation.x = rx;
+          peg.rotation.z = rz;
+          g.add(peg);
+        }
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeTerrainBlockMesh(type, ghost){
+        const bodyMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x927352, roughness: 0.82, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.54 : 1});
+        const g = new THREE.Group();
+        if(type === "slope"){
+          const slope = new THREE.BoxGeometry(TILE * 0.9, BLOCK_H * 0.96, TILE * 0.9);
+          const p = slope.attributes.position;
+          for(let i = 0; i < p.count; i++){
+            const y = p.getY(i);
+            if(y > 0){
+              const z = p.getZ(i);
+              const t = (TILE * 0.45 - z) / (TILE * 0.9);
+              p.setY(i, -BLOCK_H * 0.48 + t * BLOCK_H * 0.96);
+            }
+          }
+          p.needsUpdate = true;
+          slope.computeVertexNormals();
+          g.add(this._mesh(slope, bodyMat, 0, 0, 0));
+        }else{
+          g.add(this._mesh(new THREE.BoxGeometry(TILE * 0.9, BLOCK_H, TILE * 0.9), bodyMat, 0, 0, 0));
+        }
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeArchMesh(ghost){
+        const g = new THREE.Group();
+        const stone = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x8e836f, roughness: 0.9, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.54 : 1});
+        const edge = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x6f6656, roughness: 0.92, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.54 : 1});
+        const depth = TILE * 0.86;
+        const legH = 1.24;
+        const legW = 0.26;
+        const legX = 0.84;
+        g.add(this._mesh(new THREE.BoxGeometry(legW, legH, depth), stone, -legX, legH * 0.5, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(legW, legH, depth), stone, legX, legH * 0.5, 0));
+        const ribSegs = 8;
+        for(let i = 0; i <= ribSegs; i++){
+          const t = i / ribSegs;
+          const a = Math.PI - t * Math.PI;
+          const x = Math.cos(a) * 0.84;
+          const y = legH + Math.sin(a) * 0.54;
+          const rib = this._mesh(new THREE.BoxGeometry(0.22, 0.2, depth), stone, x, y, 0);
+          rib.rotation.z = -a;
+          g.add(rib);
+        }
+        g.add(this._mesh(new THREE.BoxGeometry(2.0, 0.08, depth), edge, 0, 0.04, 0));
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makePondMesh(ghost){
+        const g = new THREE.Group();
+        const rimMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x7f6a4f, roughness: 0.82, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.54 : 1});
+        const waterMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x4a96c9, roughness: 0.24, metalness: 0.08, transparent: true, opacity: ghost ? 0.5 : 0.82});
+        const dirt = this._mesh(new THREE.CylinderGeometry(TILE * 0.44, TILE * 0.44, 0.08, 24), rimMat, 0, 0.04, 0);
+        const water = this._mesh(new THREE.CylinderGeometry(TILE * 0.36, TILE * 0.38, 0.05, 24), waterMat, 0, 0.08, 0);
+        g.add(dirt, water);
+        for(let i = 0; i < 4; i++){
+          const lily = this._mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.01, 14), new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x3c9f64, roughness: 0.64, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.54 : 1}),
+            (Math.random() - 0.5) * TILE * 0.35,
+            0.11,
+            (Math.random() - 0.5) * TILE * 0.35
+          );
+          g.add(lily);
+        }
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeMountainMesh(axis, ghost){
+        const g = new THREE.Group();
+        const rock = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x8c6e4a, roughness: 0.94, metalness: 0.02, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const rockDark = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x6d5438, roughness: 0.96, metalness: 0.02, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const sand = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0xc8a772, roughness: 0.9, metalness: 0.01, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const railMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0xb6bdc7, roughness: 0.36, metalness: 0.65, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const tieMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x4f3b2b, roughness: 0.82, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const cactusMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x3b9d4d, roughness: 0.74, metalness: 0.06, transparent: ghost, opacity: ghost ? 0.52 : 1});
+        const cactusTip = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x52bc63, roughness: 0.7, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.52 : 1});
+
+        const baseW = TILE * 2.9;
+        const wallW = TILE * 0.9;
+        const wallH = BLOCK_H * 1.8;
+        const trenchW = TILE * 1.08;
+
+        g.add(this._mesh(new THREE.BoxGeometry(baseW, 0.14, baseW), sand, 0, 0.07, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(trenchW, 0.2, TILE * 2.7), rockDark, 0, 0.1, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(wallW, wallH, baseW), rock, -TILE * 1.0, wallH * 0.5, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(wallW, wallH, baseW), rock, TILE * 1.0, wallH * 0.5, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(wallW * 0.94, 0.12, baseW * 0.9), sand, -TILE * 1.0, wallH + 0.06, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(wallW * 0.94, 0.12, baseW * 0.9), sand, TILE * 1.0, wallH + 0.06, 0));
+
+        const railLen = TILE * 2.66;
+        g.add(this._mesh(new THREE.BoxGeometry(0.09, 0.13, railLen), railMat, -0.33, 0.23, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(0.09, 0.13, railLen), railMat, 0.33, 0.23, 0));
+        const tieGeo = new THREE.BoxGeometry(0.86, 0.08, 0.14);
+        for(let i = -5; i <= 5; i++) g.add(this._mesh(tieGeo, tieMat, 0, 0.17, i * 0.47));
+
+        for(const z of [-TILE, 0, TILE]){
+          g.add(this._mesh(new THREE.BoxGeometry(trenchW * 0.86, 0.04, TILE * 0.78), rockDark, 0, 0.15, z));
+        }
+
+        const addCactus = (x, z, scale = 1) => {
+          const cg = new THREE.Group();
+          cg.position.set(x, wallH + 0.09, z);
+          const stem = this._mesh(new THREE.CylinderGeometry(0.085 * scale, 0.11 * scale, 0.85 * scale, 10), cactusMat, 0, 0.42 * scale, 0);
+          const armL = this._mesh(new THREE.CylinderGeometry(0.045 * scale, 0.06 * scale, 0.36 * scale, 8), cactusMat, -0.16 * scale, 0.45 * scale, 0);
+          armL.rotation.z = Math.PI * 0.5;
+          const armR = this._mesh(new THREE.CylinderGeometry(0.04 * scale, 0.055 * scale, 0.3 * scale, 8), cactusMat, 0.14 * scale, 0.32 * scale, 0);
+          armR.rotation.z = -Math.PI * 0.5;
+          const tip = this._mesh(new THREE.SphereGeometry(0.09 * scale, 10, 8), cactusTip, 0, 0.85 * scale, 0);
+          cg.add(stem, armL, armR, tip);
+          g.add(cg);
+        };
+        addCactus(-TILE * 1.0, -TILE * 0.82, 1.15);
+        addCactus(TILE * 1.02, TILE * 0.76, 1.0);
+        addCactus(TILE * 0.86, -TILE * 0.42, 0.85);
+
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeTreeMesh(type, ghost){
+        const g = new THREE.Group();
+        const trunkMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : 0x6b4528, roughness: 0.82, metalness: 0.03, transparent: ghost, opacity: ghost ? 0.56 : 1});
+        const leafPalette = {
+          pine: 0x2f8f4f,
+          round: 0x469c5e,
+          autumn: 0xc97a2e
+        };
+        const leafMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : (leafPalette[type] || leafPalette.pine), roughness: 0.76, metalness: 0.06, transparent: ghost, opacity: ghost ? 0.56 : 1});
+        const trunk = this._mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.62, 10), trunkMat, 0, 0.31, 0);
+        g.add(trunk);
+        if(type === "pine"){
+          g.add(this._mesh(new THREE.ConeGeometry(0.38, 0.5, 12), leafMat, 0, 0.55, 0));
+          g.add(this._mesh(new THREE.ConeGeometry(0.3, 0.42, 12), leafMat, 0, 0.78, 0));
+          g.add(this._mesh(new THREE.ConeGeometry(0.22, 0.32, 12), leafMat, 0, 0.98, 0));
+        }else if(type === "round"){
+          g.add(this._mesh(new THREE.SphereGeometry(0.3, 14, 12), leafMat, 0, 0.68, 0));
+          g.add(this._mesh(new THREE.SphereGeometry(0.24, 12, 10), leafMat, -0.2, 0.62, 0));
+          g.add(this._mesh(new THREE.SphereGeometry(0.24, 12, 10), leafMat, 0.2, 0.62, 0));
+          g.add(this._mesh(new THREE.SphereGeometry(0.22, 12, 10), leafMat, 0, 0.9, 0));
+        }else{
+          const crown = this._mesh(new THREE.SphereGeometry(0.33, 14, 12), leafMat, 0, 0.73, 0);
+          crown.scale.set(0.9, 1.25, 0.9);
+          g.add(crown);
+          g.add(this._mesh(new THREE.SphereGeometry(0.22, 12, 10), leafMat, -0.15, 0.6, 0.1));
+          g.add(this._mesh(new THREE.SphereGeometry(0.2, 12, 10), leafMat, 0.18, 0.62, -0.08));
+        }
+        g.scale.setScalar(2);
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeAnimalMesh(type, ghost){
+        const g = new THREE.Group();
+        const bodyPalette = {cow: 0xf1f0ec, sheep: 0xf5f3ef, horse: 0x8a5a2f};
+        const darkPalette = {cow: 0x111111, sheep: 0x7b6752, horse: 0x3a2412};
+        const bodyMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : (bodyPalette[type] || bodyPalette.cow), roughness: 0.72, metalness: 0.05, transparent: ghost, opacity: ghost ? 0.55 : 1});
+        const darkMat = new THREE.MeshStandardMaterial({color: ghost ? 0x78d8a9 : (darkPalette[type] || darkPalette.cow), roughness: 0.78, metalness: 0.04, transparent: ghost, opacity: ghost ? 0.55 : 1});
+        const legGeo = new THREE.CylinderGeometry(0.055, 0.06, 0.46, 10);
+        if(type === "sheep"){
+          g.add(this._mesh(new THREE.SphereGeometry(0.34, 14, 12), bodyMat, 0, 0.5, 0));
+          g.add(this._mesh(new THREE.SphereGeometry(0.18, 12, 10), darkMat, 0.3, 0.48, 0.03));
+          for(const p of [[-0.14,-0.12],[0.14,-0.12],[-0.14,0.12],[0.14,0.12]]){
+            g.add(this._mesh(legGeo, darkMat, p[0], 0.2, p[1]));
+          }
+        }else if(type === "horse"){
+          g.add(this._mesh(new THREE.BoxGeometry(1.08, 0.42, 0.46), bodyMat, 0.02, 0.5, 0));
+          g.add(this._mesh(new THREE.BoxGeometry(0.22, 0.42, 0.16), bodyMat, 0.45, 0.71, 0.01));
+          g.add(this._mesh(new THREE.BoxGeometry(0.34, 0.21, 0.16), bodyMat, 0.69, 0.74, 0.01));
+          g.add(this._mesh(new THREE.BoxGeometry(0.1, 0.1, 0.12), darkMat, 0.84, 0.68, 0.01));
+          g.add(this._mesh(new THREE.BoxGeometry(0.08, 0.36, 0.12), darkMat, 0.36, 0.83, 0.01));
+          g.add(this._mesh(new THREE.BoxGeometry(0.22, 0.07, 0.12), darkMat, 0.1, 0.76, 0.01));
+          g.add(this._mesh(new THREE.BoxGeometry(0.08, 0.26, 0.08), darkMat, -0.54, 0.57, 0.01));
+          const horseLegGeo = new THREE.CylinderGeometry(0.05, 0.055, 0.58, 10);
+          for(const p of [[-0.3,-0.15],[0.25,-0.15],[-0.3,0.15],[0.25,0.15]]){
+            g.add(this._mesh(horseLegGeo, darkMat, p[0], 0.24, p[1]));
+            g.add(this._mesh(new THREE.BoxGeometry(0.11, 0.06, 0.11), darkMat, p[0], -0.06, p[1]));
+          }
+        }else{
+          g.add(this._mesh(new THREE.BoxGeometry(0.92, 0.42, 0.48), bodyMat, 0, 0.44, 0));
+          g.add(this._mesh(new THREE.BoxGeometry(0.3, 0.25, 0.2), bodyMat, 0.45, 0.5, 0.02));
+          for(const p of [[-0.28,-0.16],[0.28,-0.16],[-0.28,0.16],[0.28,0.16]]){
+            g.add(this._mesh(legGeo, darkMat, p[0], 0.2, p[1]));
+          }
+          // Exactly 5 cow spots:
+          // top: 2 (one small, one slightly bigger), left side: 2, right side: 1.
+          const topBig = this._mesh(new THREE.SphereGeometry(0.095, 10, 8), darkMat, 0.08, 0.64, 0.02);
+          topBig.scale.set(1.35, 0.5, 1.05);
+          g.add(topBig);
+          const topSmall = this._mesh(new THREE.SphereGeometry(0.07, 10, 8), darkMat, -0.16, 0.67, -0.14);
+          topSmall.scale.set(1.05, 0.5, 0.9);
+          g.add(topSmall);
+          const leftA = this._mesh(new THREE.SphereGeometry(0.09, 10, 8), darkMat, -0.06, 0.5, 0.23);
+          leftA.scale.set(1.2, 0.82, 0.46);
+          g.add(leftA);
+          const leftB = this._mesh(new THREE.SphereGeometry(0.075, 10, 8), darkMat, 0.28, 0.38, 0.24);
+          leftB.scale.set(1.1, 0.8, 0.44);
+          g.add(leftB);
+          const rightA = this._mesh(new THREE.SphereGeometry(0.09, 10, 8), darkMat, 0.12, 0.49, -0.23);
+          rightA.scale.set(1.24, 0.82, 0.46);
+          g.add(rightA);
+        }
+        g.scale.setScalar(1.8);
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeLocomotive(style, color, ghost){
+        const g = new THREE.Group();
+        const shell = new THREE.MeshStandardMaterial({color, roughness: 0.38, metalness: 0.16, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        const dark = new THREE.MeshStandardMaterial({color: ghost ? color : 0x20252d, roughness: 0.52, metalness: 0.28, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        const trim = new THREE.MeshStandardMaterial({color: ghost ? color : 0xc6cdd6, roughness: 0.3, metalness: 0.72, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        const glow = new THREE.MeshStandardMaterial({color: ghost ? color : 0xf3f1cb, emissive: ghost ? 0x000000 : 0xffd37a, emissiveIntensity: ghost ? 0 : 0.38, roughness: 0.4, metalness: 0.16, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        if(style === "classic"){
+          g.add(this._mesh(new THREE.BoxGeometry(1.18, 0.22, 2.35), dark, 0, 0.15, 0));
+          const boiler = this._mesh(new THREE.CylinderGeometry(0.34, 0.34, 1.42, 24), shell, 0, 0.42, 0.12);
+          boiler.rotation.x = Math.PI / 2;
+          g.add(boiler);
+          g.add(this._mesh(new THREE.BoxGeometry(0.9, 0.68, 0.72), shell, 0, 0.53, -0.7));
+          g.add(this._mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.35, 20), dark, 0, 0.76, 0.62));
+          g.add(this._mesh(new THREE.SphereGeometry(0.11, 12, 10), glow, 0, 0.45, 1.15));
+        }else if(style === "bullet"){
+          g.add(this._mesh(new THREE.BoxGeometry(1.16, 0.2, 2.25), dark, 0, 0.13, 0));
+          g.add(this._mesh(new THREE.BoxGeometry(1.02, 0.58, 1.2), shell, 0, 0.44, -0.25));
+          const nose = this._mesh(new THREE.CylinderGeometry(0.06, 0.45, 0.9, 24), shell, 0, 0.4, 0.82);
+          nose.rotation.x = Math.PI / 2;
+          g.add(nose);
+          g.add(this._mesh(new THREE.BoxGeometry(0.86, 0.25, 0.5), trim, 0, 0.72, -0.52));
+          g.add(this._mesh(new THREE.BoxGeometry(0.62, 0.09, 1.35), trim, 0, 0.66, 0.16));
+          g.add(this._mesh(new THREE.SphereGeometry(0.08, 10, 8), glow, 0, 0.44, 1.2));
+        }else if(style === "passenger"){
+          g.add(this._mesh(new THREE.BoxGeometry(1.2, 0.22, 2.58), dark, 0, 0.14, 0));
+          g.add(this._mesh(new THREE.BoxGeometry(1.06, 0.58, 1.82), shell, 0, 0.45, -0.02));
+          const roof = this._mesh(new THREE.CylinderGeometry(0.31, 0.31, 1.76, 24), trim, 0, 0.74, -0.02);
+          roof.rotation.x = Math.PI / 2;
+          g.add(roof);
+          const nose = this._mesh(new THREE.CylinderGeometry(0.08, 0.46, 0.62, 22), shell, 0, 0.4, 1.1);
+          nose.rotation.x = Math.PI / 2;
+          g.add(nose);
+          g.add(this._mesh(new THREE.BoxGeometry(0.86, 0.08, 1.86), trim, 0, 0.24, -0.06));
+          for(const z of [-0.62, -0.35, -0.08, 0.19, 0.46]){
+            g.add(this._mesh(new THREE.BoxGeometry(0.88, 0.16, 0.1), glow, 0, 0.58, z));
+          }
+          g.add(this._mesh(new THREE.BoxGeometry(0.62, 0.14, 0.1), glow, 0, 0.46, 1.22));
+        }else{
+          g.add(this._mesh(new THREE.BoxGeometry(1.18, 0.24, 2.48), dark, 0, 0.15, 0));
+          g.add(this._mesh(new THREE.BoxGeometry(1.02, 0.62, 1.62), shell, 0, 0.48, -0.03));
+          g.add(this._mesh(new THREE.BoxGeometry(0.76, 0.38, 0.56), shell, 0, 0.66, 0.64));
+          g.add(this._mesh(new THREE.BoxGeometry(0.78, 0.06, 1.86), trim, 0, 0.82, -0.07));
+          g.add(this._mesh(new THREE.BoxGeometry(0.82, 0.16, 0.3), dark, 0, 0.25, 1.13));
+          g.add(this._mesh(new THREE.SphereGeometry(0.08, 10, 8), glow, 0, 0.52, 1.23));
+        }
+        const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.1, 16);
+        for(const z of [-0.7, -0.2, 0.3, 0.8]){
+          const l = this._mesh(wheelGeo, trim, -0.56, 0.12, z);
+          const r = this._mesh(wheelGeo, trim, 0.56, 0.12, z);
+          l.rotation.z = Math.PI / 2;
+          r.rotation.z = Math.PI / 2;
+          g.add(l, r);
+        }
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _makeCart(color, ghost){
+        const g = new THREE.Group();
+        const shell = new THREE.MeshStandardMaterial({color, roughness: 0.42, metalness: 0.12, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        const dark = new THREE.MeshStandardMaterial({color: ghost ? color : 0x222833, roughness: 0.58, metalness: 0.21, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        const trim = new THREE.MeshStandardMaterial({color: ghost ? color : 0xbec7d1, roughness: 0.35, metalness: 0.66, transparent: ghost, opacity: ghost ? 0.5 : 1});
+        g.add(this._mesh(new THREE.BoxGeometry(1.12, 0.2, 1.44), dark, 0, 0.13, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(1.0, 0.45, 1.26), shell, 0, 0.43, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(0.88, 0.08, 1.04), trim, 0, 0.68, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(0.08, 0.22, 1.08), dark, -0.46, 0.43, 0));
+        g.add(this._mesh(new THREE.BoxGeometry(0.08, 0.22, 1.08), dark, 0.46, 0.43, 0));
+        const wheelGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.08, 14);
+        for(const p of [-0.45, 0.45]){
+          const l = this._mesh(wheelGeo, trim, -0.52, 0.12, p);
+          const r = this._mesh(wheelGeo, trim, 0.52, 0.12, p);
+          l.rotation.z = Math.PI / 2;
+          r.rotation.z = Math.PI / 2;
+          g.add(l, r);
+        }
+        g.traverse((o) => { if(o.isMesh){ o.castShadow = !ghost; o.receiveShadow = true; } });
+        return g;
+      }
+      _spawnTrain(candidate){
+        const units = [];
+        const loco = this._makeLocomotive(this.state.style, this.state.color, false);
+        this.trainG.add(loco);
+        units.push(loco);
+        for(let i = 0; i < this.state.carts; i++){
+          const cart = this._makeCart(this.state.color, false);
+          this.trainG.add(cart);
+          units.push(cart);
+        }
+        const track = this._trackAt(candidate.x, candidate.z);
+        const center = this._cellCenter(candidate.x, candidate.z);
+        center.y = this._trackCenterY(track);
+        const dirVec = DIR_STEP[candidate.dir].vec.clone();
+        const spacing = 1.35;
+        const yaw = yawForDir(candidate.dir);
+        units.forEach((u, i) => {
+          u.position.copy(center).addScaledVector(dirVec, -i * spacing);
+          u.rotation.y = yaw;
+        });
+        const trail = [];
+        for(let d = 0; d < 30; d += 0.08) trail.push(center.clone().addScaledVector(dirVec, -d));
+        const train = {
+          id: this.nextTrainId++, units, headPos: center.clone(), trail, spacing,
+          maxTrail: Math.max(35, spacing * (units.length + 3) + 16), baseSpeed: 2.4 + Math.random() * 0.35,
+          cellX: candidate.x, cellZ: candidate.z, dir: candidate.dir, entryDir: null,
+          nextCellX: candidate.x, nextCellZ: candidate.z, moveTarget: null, moveDir: dirVec.clone(), segmentRemain: 0,
+          onTrack: true, flying: false, flyVy: 0, wings: null, wingPhase: Math.random() * Math.PI * 2, tunnelTimer: 0,
+          startDelay: 1.0, heading: dirVec.clone(), dead: false
+        };
+        this._routeFromCell(train, true);
+        this.trains.push(train);
+        this._updateHud();
+        this._msg("Train placed. Departure in 1 second");
+      }
+      _routeFromCell(train, initial){
+        const piece = this._trackAt(train.cellX, train.cellZ);
+        if(!piece){ this._derail(train); return; }
+        if(initial){
+          if(!piece.connectors.has(train.dir)){ this._derail(train); return; }
+        }else{
+          const outDir = piece.type === "fork" ? this._forkExit(piece, train.entryDir) : exitFor(piece.type, piece.rot, train.entryDir);
+          if(!outDir){ this._derail(train); return; }
+          train.dir = outDir;
+        }
+        const step = DIR_STEP[train.dir];
+        const nx = train.cellX + step.x;
+        const nz = train.cellZ + step.z;
+        const nextPiece = this._trackAt(nx, nz);
+        const exitH = this._connectorHeight(piece, train.dir);
+        if(nextPiece && nextPiece.connectors.has(OPP[train.dir]) && this._connectorHeight(nextPiece, OPP[train.dir]) === exitH){
+          const target = this._cellCenter(nx, nz);
+          target.y = this._trackCenterY(nextPiece);
+          const v = target.clone().sub(train.headPos);
+          const len = v.length();
+          if(len < 1e-5){
+            train.segmentRemain = 0;
+            train.moveDir.copy(step.vec);
+            train.moveTarget = target;
+          }else{
+            train.segmentRemain = len;
+            train.moveDir.copy(v.multiplyScalar(1 / len));
+            train.moveTarget = target;
+          }
+          train.nextCellX = nx;
+          train.nextCellZ = nz;
+          train.onTrack = true;
+          train.flying = false;
+          return;
+        }
+        this._derail(train);
+      }
+      _derail(train){
+        train.onTrack = false;
+        train.flying = false;
+        train.moveTarget = null;
+        train.segmentRemain = 0;
+        train.moveDir.copy(DIR_STEP[train.dir].vec);
+      }
+      _updateTrains(dt){
+        for(const train of this.trains){
+          if(!train.dead) this._stepTrain(train, dt);
+        }
+        this._checkCollisions();
+        this._removeDeadTrains();
+      }
+      _stepTrain(train, dt){
+        if(train.tunnelTimer > 0){
+          train.tunnelTimer -= dt;
+          if(train.tunnelTimer <= 0){
+            train.units.forEach((u) => u.visible = true);
+            train.tunnelTimer = 0;
+          }
+        }
+        if(train.startDelay > 0){
+          train.startDelay -= dt;
+          if(train.startDelay > 0) return;
+          dt = -train.startDelay;
+          if(dt <= 0) return;
+        }
+        let move = train.baseSpeed * this.state.speedScale * dt;
+        if(train.onTrack){
+          while(move > 0 && train.onTrack && !train.dead){
+            if(train.segmentRemain <= 1e-5){
+              train.entryDir = OPP[train.dir];
+              train.cellX = train.nextCellX;
+              train.cellZ = train.nextCellZ;
+              this._checkTunnel(train);
+              this._routeFromCell(train, false);
+              if(!train.onTrack) break;
+            }
+            if(move < train.segmentRemain){
+              train.headPos.addScaledVector(train.moveDir, move);
+              train.segmentRemain -= move;
+              move = 0;
+            }else{
+              train.headPos.copy(train.moveTarget);
+              move -= train.segmentRemain;
+              train.segmentRemain = 0;
+            }
+          }
+        }else{
+          train.headPos.addScaledVector(train.moveDir, move);
+          const half = this.boardWorld / 2;
+          if(!train.flying && (Math.abs(train.headPos.x) > half || Math.abs(train.headPos.z) > half)){
+            train.flying = true;
+            train.flyVy = 0.6;
+            this._attachWings(train);
+          }
+          if(train.flying){
+            train.flyVy = Math.min(2.4, train.flyVy + 1.2 * dt);
+            train.headPos.y += train.flyVy * dt;
+            this._updateWings(train, dt);
+          }
+        }
+        this._appendTrail(train);
+        this._placeTrainUnits(train);
+        if(train.flying && (train.headPos.y > 70 || train.headPos.length() > this.boardWorld * 2.4)) train.dead = true;
+      }
+      _appendTrail(train){
+        const h = train.headPos;
+        if(!train.trail.length || train.trail[0].distanceToSquared(h) > 0.0008) train.trail.unshift(h.clone());
+        else train.trail[0].copy(h);
+        let walked = 0;
+        for(let i = 0; i < train.trail.length - 1; i++){
+          walked += train.trail[i].distanceTo(train.trail[i + 1]);
+          if(walked > train.maxTrail){ train.trail.length = i + 2; break; }
+        }
+      }
+      _sampleTrail(train, dist){
+        if(!train.trail.length) return train.headPos.clone();
+        let left = dist;
+        for(let i = 0; i < train.trail.length - 1; i++){
+          const a = train.trail[i], b = train.trail[i + 1], seg = a.distanceTo(b);
+          if(seg < 1e-6) continue;
+          if(left <= seg) return a.clone().lerp(b, left / seg);
+          left -= seg;
+        }
+        return train.trail[train.trail.length - 1].clone();
+      }
+      _placeTrainUnits(train){
+        for(let i = 0; i < train.units.length; i++){
+          const dist = i * train.spacing;
+          const pos = this._sampleTrail(train, dist);
+          const unit = train.units[i];
+          unit.position.copy(pos);
+          const ahead = this._sampleTrail(train, Math.max(0, dist - 0.22));
+          const behind = this._sampleTrail(train, dist + 0.22);
+          const dir = ahead.sub(behind);
+          if(dir.lengthSq() > 1e-6){
+            dir.normalize();
+            unit.rotation.y = Math.atan2(dir.x, dir.z);
+            if(i === 0) train.heading.copy(dir);
+          }
+        }
+      }
+      _checkTunnel(train){
+        const m = this._mountainAtCenterCell(train.cellX, train.cellZ);
+        if(!m || !m.tunnel) return;
+        const dirs = m.axis === "ns" ? ["N", "S"] : ["E", "W"];
+        if(!dirs.includes(train.entryDir)) return;
+        train.tunnelTimer = 0.55;
+        train.units.forEach((u) => u.visible = false);
+      }
+      _attachWings(train){
+        if(train.wings || !train.units.length) return;
+        const root = train.units[0];
+        const boneMat = new THREE.MeshStandardMaterial({color: 0xd8dde7, roughness: 0.38, metalness: 0.18});
+        const featherMat = new THREE.MeshStandardMaterial({color: 0xf2f4fb, roughness: 0.5, metalness: 0.04});
+        const mkWing = (side) => {
+          const g = new THREE.Group();
+          g.position.set(side * 0.78, 0.58, -0.06);
+          g.rotation.y = side * 0.25;
+          const rootBone = this._mesh(new THREE.BoxGeometry(0.12, 0.08, 2.6), boneMat, side * 0.45, 0, 0);
+          rootBone.rotation.y = side * 0.36;
+          g.add(rootBone);
+          for(let i = 0; i < 12; i++){
+            const len = 7.6 - i * 0.46;
+            const feather = this._mesh(new THREE.BoxGeometry(0.1, 0.03, Math.max(1.8, len)), featherMat,
+              side * (1.15 + i * 0.5),
+              -0.05 - i * 0.015,
+              -0.15 - i * 0.12
+            );
+            feather.rotation.y = side * (0.36 + i * 0.02);
+            feather.rotation.x = -0.08 - i * 0.01;
+            g.add(feather);
+          }
+          return g;
+        };
+        const left = mkWing(-1);
+        const right = mkWing(1);
+        root.add(left, right);
+        train.wings = {left, right};
+      }
+      _updateWings(train, dt){
+        if(!train.wings) return;
+        train.wingPhase += dt * 9;
+        const a = Math.sin(train.wingPhase) * 0.62;
+        train.wings.left.rotation.z = a;
+        train.wings.right.rotation.z = -a;
+      }
+      _checkCollisions(){
+        for(let i = 0; i < this.trains.length; i++){
+          const a = this.trains[i];
+          if(a.dead || a.startDelay > 0 || !a.units[0].visible) continue;
+          for(let j = i + 1; j < this.trains.length; j++){
+            const b = this.trains[j];
+            if(b.dead || b.startDelay > 0 || !b.units[0].visible) continue;
+            const pa = a.units[0].position;
+            const pb = b.units[0].position;
+            const d2 = pa.distanceToSquared(pb);
+            if(d2 > 1.2 * 1.2) continue;
+            const dot = a.heading.dot(b.heading);
+            if(dot < -0.1 || d2 < 0.7 * 0.7){
+              const hit = pa.clone().add(pb).multiplyScalar(0.5);
+              this._explode(hit);
+              a.dead = true;
+              b.dead = true;
+            }
+          }
+          if(a.dead) continue;
+          for(const animal of this.animals){
+            if(animal.dead) continue;
+            const pb = animal.mesh.position;
+            let hitUnitPos = null;
+            for(const unit of a.units){
+              if(!unit.visible) continue;
+              if(unit.position.distanceToSquared(pb) <= 1.75 * 1.75){
+                hitUnitPos = unit.position;
+                break;
+              }
+            }
+            if(!hitUnitPos) continue;
+            const hit = hitUnitPos.clone().add(pb).multiplyScalar(0.5);
+            this._explode(hit);
+            a.dead = true;
+            break;
+          }
+        }
+      }
+      _explode(pos){
+        const colors = [0xff9d2b, 0xff4a2b, 0xffda58, 0xffffff];
+        for(let i = 0; i < 44; i++){
+          const color = colors[(Math.random() * colors.length) | 0];
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08 + Math.random() * 0.08, 8, 8),
+            new THREE.MeshStandardMaterial({color, emissive: color, emissiveIntensity: 0.4, transparent: true, opacity: 0.95})
+          );
+          m.position.copy(pos);
+          this.fxG.add(m);
+          const v = new THREE.Vector3((Math.random() - 0.5) * 7.8, 1.4 + Math.random() * 4.2, (Math.random() - 0.5) * 7.8);
+          this.fx.push({mesh: m, vel: v, life: 1.15, max: 1.15});
+        }
+        this._msg("Crash detected");
+      }
+      _updateFx(dt){
+        if(!this.fx.length) return;
+        const keep = [];
+        for(const p of this.fx){
+          p.life -= dt;
+          if(p.life <= 0){
+            this.fxG.remove(p.mesh);
+            continue;
+          }
+          p.vel.y -= 8.7 * dt;
+          p.mesh.position.addScaledVector(p.vel, dt);
+          p.mesh.material.opacity = Math.max(0, p.life / p.max);
+          keep.push(p);
+        }
+        this.fx = keep;
+      }
+      _removeDeadTrains(){
+        if(!this.trains.some((t) => t.dead)) return;
+        const keep = [];
+        for(const train of this.trains){
+          if(train.dead){
+            train.units.forEach((u) => this.trainG.remove(u));
+          }else{
+            keep.push(train);
+          }
+        }
+        this.trains = keep;
+        this._updateHud();
+      }
+      _clearTracks(confirmBox){
+        if(confirmBox && this.tracks.size && !confirm("Clear all tracks?")) return;
+        this.tracks.forEach((t) => this.trackG.remove(t.mesh));
+        this.tracks.clear();
+        this.arches.forEach((a) => this.archG.remove(a.mesh));
+        this.arches.clear();
+        this._refreshHover();
+        this._updateHud();
+      }
+      _clearTrees(confirmBox){
+        if(confirmBox && this.trees.size && !confirm("Clear all trees?")) return;
+        this.trees.forEach((t) => this.treeG.remove(t.mesh));
+        this.trees.clear();
+        this._refreshHover();
+        this._updateHud();
+      }
+      _clearAnimals(confirmBox){
+        if(confirmBox && this.animals.length && !confirm("Clear all animals?")) return;
+        this.animals.forEach((a) => this.animalG.remove(a.mesh));
+        this.animals = [];
+        this._refreshHover();
+        this._updateHud();
+      }
+      _clearTerrain(confirmBox){
+        if(confirmBox && (this.blocks.size || this.arches.size || this.ponds.size || this.mountains.size) && !confirm("Clear all terrain blocks, arches, ponds, and canyons?")) return;
+        if(this.tracks.size){
+          this._msg("Clear tracks first before clearing terrain");
+          return;
+        }
+        if(this.trees.size){
+          this._msg("Clear trees first before clearing terrain");
+          return;
+        }
+        this.blocks.forEach((stack) => stack.forEach((b) => this.blockG.remove(b.mesh)));
+        this.blocks.clear();
+        this.arches.forEach((a) => this.archG.remove(a.mesh));
+        this.arches.clear();
+        this.ponds.forEach((p) => this.pondG.remove(p.mesh));
+        this.ponds.clear();
+        this.mountains.forEach((m) => this.mountainG.remove(m.mesh));
+        this.mountains.clear();
+        this.mountainCellIndex.clear();
+        this._refreshHover();
+        this._updateHud();
+      }
+      _clearTrains(confirmBox){
+        if(confirmBox && this.trains.length && !confirm("Clear all trains?")) return;
+        this.trains.forEach((t) => t.units.forEach((u) => this.trainG.remove(u)));
+        this.trains = [];
+        this._updateHud();
+      }
+      _normRot(deg){
+        const n = Number(deg);
+        if(!Number.isFinite(n)) return 0;
+        return (((Math.round(n / 90) * 90) % 360) + 360) % 360;
+      }
+      _serializeWorld(){
+        const blocks = [];
+        this.blocks.forEach((stack, k) => {
+          const parts = k.split(",");
+          const x = Number(parts[0]);
+          const z = Number(parts[1]);
+          if(!Number.isFinite(x) || !Number.isFinite(z)) return;
+          blocks.push({
+            x, z,
+            stack: stack.map((b) => ({type: b.type === "slope" ? "slope" : "block", rot: this._normRot(b.rot)}))
+          });
+        });
+        const tracks = [];
+        this.tracks.forEach((t) => {
+          let saveType = t.type;
+          if(saveType === "curve" || saveType === "curve_r") saveType = "curve_l";
+          const row = {x: t.x, z: t.z, type: saveType, rot: this._normRot(t.rot), h: Math.max(0, Math.floor(t.h || 0))};
+          if(t.type === "fork") row.switchTo = t.switchTo === "left" ? "left" : "right";
+          tracks.push(row);
+        });
+        const arches = [];
+        this.arches.forEach((a) => arches.push({x: a.x, z: a.z}));
+        const ponds = [];
+        this.ponds.forEach((p) => ponds.push({x: p.x, z: p.z}));
+        const trees = [];
+        this.trees.forEach((t) => trees.push({x: t.x, z: t.z, type: t.type}));
+        const animals = [];
+        this.animals.forEach((a) => {
+          const c = this._worldToCell(a.mesh.position.x, a.mesh.position.z);
+          if(c) animals.push({x: c.x, z: c.z, type: a.type});
+        });
+        const mountains = [];
+        this.mountains.forEach((m) => mountains.push({cx: m.cx, cz: m.cz, rot: this._normRot(m.rot)}));
+        blocks.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        tracks.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        arches.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        ponds.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        trees.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        animals.sort((a, b) => (a.z - b.z) || (a.x - b.x));
+        mountains.sort((a, b) => (a.cz - b.cz) || (a.cx - b.cx));
+        return {
+          version: 2,
+          app: "TrainForge3D",
+          savedAt: new Date().toISOString(),
+          board: this.state.board,
+          speedScale: this.state.speedScale,
+          blocks,
+          tracks,
+          arches,
+          ponds,
+          trees,
+          animals,
+          mountains
+        };
+      }
+      _saveWorldToFile(){
+        const data = this._serializeWorld();
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `trainforge-world-${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1200);
+        this._msg("World saved to file");
+      }
+      _loadWorldFromFile(file){
+        const reader = new FileReader();
+        reader.onerror = () => this._msg("Could not read save file");
+        reader.onload = () => {
+          try{
+            const text = typeof reader.result === "string" ? reader.result : "";
+            const data = JSON.parse(text);
+            const ok = this._loadWorldData(data);
+            if(ok) this._msg("World loaded");
+          }catch(err){
+            console.error(err);
+            this._msg("Invalid save file");
+          }
+        };
+        reader.readAsText(file);
+      }
+      _loadWorldData(data){
+        if(!data || typeof data !== "object") throw new Error("Save file is not an object");
+        const board = Number(data.board);
+        if(!Number.isFinite(board) || board < 12 || board > 80) throw new Error("Invalid board size");
+        const hasScene = this.tracks.size || this.blocks.size || this.arches.size || this.ponds.size || this.mountains.size || this.trees.size || this.animals.length || this.trains.length;
+        if(hasScene && !confirm("Loading will replace the current world. Continue?")) return false;
+
+        this._clearTrains(false);
+        this._clearTracks(false);
+        this._clearTrees(false);
+        this._clearAnimals(false);
+        this._clearTerrain(false);
+        this.fx.forEach((p) => this.fxG.remove(p.mesh));
+        this.fx = [];
+
+        this.state.board = board;
+        this.boardWorld = board * TILE;
+        this.el.boardSize.value = String(board);
+        this._buildBoard();
+
+        const prevRot = this.state.rot;
+        const allowedTracks = new Set(["straight", "curve", "curve_r", "curve_l", "cross", "slope", "fork"]);
+        const rawTracks = Array.isArray(data.tracks) ? data.tracks : [];
+        const tracks = [];
+        const trackByCell = new Map();
+        for(const row of rawTracks){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          let type = row && typeof row.type === "string" ? row.type : "straight";
+          if(type === "curve" || type === "curve_r") type = "curve_l";
+          if(!allowedTracks.has(type)) continue;
+          const hRaw = Number(row && row.h);
+          const parsed = {
+            x, z, type,
+            rot: this._normRot(row && row.rot),
+            h: Number.isFinite(hRaw) ? Math.max(0, Math.floor(hRaw)) : null,
+            switchTo: (row && row.switchTo === "left") ? "left" : "right"
+          };
+          tracks.push(parsed);
+          trackByCell.set(keyOf(x, z), parsed);
+        }
+        const archRows = Array.isArray(data.arches) ? data.arches : [];
+        const archCells = new Set();
+        for(const row of archRows){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          archCells.add(keyOf(x, z));
+        }
+
+        const blockRows = Array.isArray(data.blocks) ? data.blocks : [];
+        const deferredArchCaps = [];
+        for(const row of blockRows){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          const stack = Array.isArray(row.stack) ? row.stack : [];
+          const k = keyOf(x, z);
+          const tk = trackByCell.get(k);
+          let foundationCount = stack.length;
+          if(archCells.has(k) && tk && Number.isFinite(tk.h)){
+            foundationCount = Math.max(0, Math.min(stack.length, tk.h));
+          }
+          for(let i = 0; i < foundationCount; i++){
+            const entry = stack[i];
+            const type = entry && entry.type === "slope" ? "slope" : "block";
+            this.state.rot = this._normRot(entry && entry.rot);
+            this._placeBlock(x, z, type);
+          }
+          if(foundationCount < stack.length){
+            deferredArchCaps.push({x, z, entries: stack.slice(foundationCount)});
+          }
+        }
+        this.state.rot = prevRot;
+
+        for(const row of tracks){
+          this._placeTrack(row.x, row.z, row.type, row.rot);
+          if(row.type === "fork"){
+            const piece = this._trackAt(row.x, row.z);
+            if(piece){
+              piece.switchTo = row.switchTo;
+              this._updateForkVisual(piece);
+            }
+          }
+        }
+
+        for(const row of archRows){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          this._placeArch(x, z);
+        }
+        const ponds = Array.isArray(data.ponds) ? data.ponds : [];
+        for(const row of ponds){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          this._placePond(x, z);
+        }
+        for(const capRow of deferredArchCaps){
+          for(const entry of capRow.entries){
+            const type = entry && entry.type === "slope" ? "slope" : "block";
+            this.state.rot = this._normRot(entry && entry.rot);
+            this._placeBlock(capRow.x, capRow.z, type);
+          }
+        }
+        this.state.rot = prevRot;
+
+        const allowedTrees = new Set(["pine", "round", "autumn"]);
+        const trees = Array.isArray(data.trees) ? data.trees : [];
+        for(const row of trees){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          const type = (row && allowedTrees.has(row.type)) ? row.type : "pine";
+          this._placeTree(x, z, type);
+        }
+        const allowedAnimals = new Set(["cow", "sheep", "horse"]);
+        const animals = Array.isArray(data.animals) ? data.animals : [];
+        for(const row of animals){
+          const x = Number(row && row.x);
+          const z = Number(row && row.z);
+          if(!Number.isFinite(x) || !Number.isFinite(z) || x < 0 || z < 0 || x >= board || z >= board) continue;
+          const type = (row && allowedAnimals.has(row.type)) ? row.type : "cow";
+          this._spawnAnimal(x, z, type);
+        }
+
+        const mountains = Array.isArray(data.mountains) ? data.mountains : [];
+        for(const row of mountains){
+          const cx = Number(row && row.cx);
+          const cz = Number(row && row.cz);
+          if(!Number.isFinite(cx) || !Number.isFinite(cz) || cx < 0 || cz < 0 || cx >= board || cz >= board) continue;
+          this._placeMountain(cx, cz, this._normRot(row && row.rot));
+        }
+
+        const speedScale = Number(data.speedScale);
+        this.state.speedScale = Number.isFinite(speedScale) ? Math.max(0.25, Math.min(3, speedScale)) : 1;
+        this.el.speedScale.value = String(Math.round(this.state.speedScale * 100));
+        this.el.speedLabel.textContent = `${this.state.speedScale.toFixed(2)}x`;
+
+        this._refreshHover();
+        this._updateHud();
+        return true;
+      }
+      _msg(text, ttl = 1400){
+        clearTimeout(this.statusTimer);
+        this.el.status.textContent = text;
+        this.el.status.classList.add("show");
+        this.statusTimer = setTimeout(() => this.el.status.classList.remove("show"), ttl);
+      }
+      _updateHud(){
+        this.el.hTracks.textContent = `Tracks: ${this.tracks.size}`;
+        let blockCount = 0;
+        this.blocks.forEach((s) => blockCount += s.length);
+        blockCount += this.arches.size;
+        blockCount += this.ponds.size;
+        blockCount += this.mountains.size;
+        this.el.hBlocks.textContent = `Blocks: ${blockCount}`;
+        this.el.hTrees.textContent = `Trees: ${this.trees.size}`;
+        this.el.hAnimals.textContent = `Animals: ${this.animals.length}`;
+        this.el.hTrains.textContent = `Trains: ${this.trains.length}`;
+        const modeName = this.state.tool === "track" ? "Place Track" : (this.state.tool === "tree" ? "Place Trees" : (this.state.tool === "animal" ? "Place Animals" : (this.state.tool === "block" ? "Place Terrain" : (this.state.tool === "train" ? "Place Train" : (this.state.tool === "erase" ? "Erase" : "View")))));
+        this.el.hMode.textContent = `Mode: ${modeName}`;
+      }
+      _loop(){
+        requestAnimationFrame(() => this._loop());
+        const now = performance.now();
+        const dt = Math.min(0.05, (now - this.lastFrame) / 1000);
+        this.lastFrame = now;
+        this.controls.update();
+        if(!this.state.paused){
+          this._updateTrains(dt);
+          this._updateAnimals(dt);
+          this._updateFx(dt);
+        }
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    new TrainForgeApp();
+  </script>
+</body>
+</html>
