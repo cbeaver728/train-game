@@ -79,6 +79,15 @@
     }
     #status.show{opacity:1}
     #mobileQuick{display:none}
+    #drawNav{
+      display:none;position:absolute;right:14px;top:54px;width:174px;
+      grid-template-columns:repeat(3,1fr);gap:6px;padding:8px;
+      border:1px solid var(--line);border-radius:14px;background:rgba(247,251,255,.96);
+      box-shadow:0 8px 22px rgba(5,18,30,.22);z-index:4
+    }
+    #app.draw-mode #drawNav{display:grid}
+    #drawNav button{min-width:0;min-height:42px;padding:6px;font-size:12px;font-weight:600}
+    #drawNav .drawHint{grid-column:1/-1;font-size:11px;line-height:1.3;text-align:center;color:#405d72}
     @media (max-width:700px){
       html,body,#app{height:100%;height:100dvh}
       #panel{
@@ -112,6 +121,9 @@
       }
       #mobileQuick button{flex:1;min-width:0;min-height:46px;padding:6px 4px;font-size:12px}
       #mobileQuick button.active{background:#d9ebfb;border-color:#78a5cb;font-weight:600}
+      #drawNav{right:8px;top:48px;width:156px;padding:6px;gap:5px}
+      #drawNav button{min-height:44px;font-size:11px}
+      #app.draw-mode #status{top:244px}
     }
     @media (max-width:900px) and (orientation:landscape) and (max-height:500px){
       #panel{left:8px;right:auto;top:8px;bottom:8px;width:min(42vw,360px);max-height:none}
@@ -138,7 +150,7 @@
           <h4>Tools</h4>
           <div class="row"><button id="toolTrack" class="active fill">Place Track</button><button id="toolTrain" class="fill">Place Train</button><button id="toolTree" class="fill treeBtn"><span class="iconTree"></span>Trees</button></div>
           <div class="row" style="margin-top:6px"><button id="toolAnimal" class="fill">Animals</button><button id="toolBlock" class="fill">Terrain</button><button id="toolErase" class="fill">Erase</button><button id="toolView" class="fill">View</button></div>
-          <div class="row" style="margin-top:6px"><button id="toolRotateTrack" class="fill">Rotate Placed Track</button></div>
+          <div class="row" style="margin-top:6px"><button id="toolRotateTrack" class="fill">Rotate Placed Track</button><button id="toolDrawTrack" class="fill">Draw Track</button></div>
           <div class="row" style="margin-top:6px"><button id="rotL" class="fill">Rotate Q</button><button id="rotR" class="fill">Rotate E</button></div>
           <div class="meta" id="pieceLabel">Track: Straight | Rotation: 0 deg</div>
         </div>
@@ -214,8 +226,19 @@
       <button id="mobileRotL" aria-label="Rotate new track left">↶</button>
       <button id="mobileRotR" aria-label="Rotate new track right">↷</button>
       <button id="mobileRotateTrack" aria-label="Rotate a placed track">Edit ↻</button>
+      <button id="mobileDrawTrack">Draw</button>
       <button id="mobileView">View</button>
       <button id="mobileErase">Erase</button>
+    </div>
+    <div id="drawNav" aria-label="Drawing camera controls">
+      <button id="drawZoomIn" aria-label="Zoom in">Zoom +</button>
+      <button id="drawPanUp" aria-label="Move grid up">Up</button>
+      <button id="drawZoomOut" aria-label="Zoom out">Zoom -</button>
+      <button id="drawPanLeft" aria-label="Move grid left">Left</button>
+      <button id="drawDone">Done</button>
+      <button id="drawPanRight" aria-label="Move grid right">Right</button>
+      <span></span><button id="drawPanDown" aria-label="Move grid down">Down</button><span></span>
+      <div class="drawHint">Drag across the grid. Curves are chosen automatically.</div>
     </div>
     <div id="hud"><span id="hTracks">Tracks: 0</span><span id="hBlocks">Blocks: 0</span><span id="hTrees">Trees: 0</span><span id="hAnimals">Animals: 0</span><span id="hTrains">Trains: 0</span><span id="hMode">Mode: Place Track</span></div>
     <div id="lockWrap"><span class="linkIcon"></span><span id="lockLabel">1 interlock</span></div>
@@ -271,7 +294,7 @@
     class TrainForgeApp{
       constructor(){
         this.el = {};
-        ["view","panel","body","collapse","mobileTrack","mobileRotL","mobileRotR","mobileRotateTrack","mobileView","mobileErase","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","toolRotateTrack","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
+        ["view","panel","body","collapse","mobileTrack","mobileRotL","mobileRotR","mobileRotateTrack","mobileDrawTrack","mobileView","mobileErase","drawZoomIn","drawZoomOut","drawPanUp","drawPanDown","drawPanLeft","drawPanRight","drawDone","toolTrack","toolTrain","toolTree","toolAnimal","toolBlock","toolErase","toolView","toolRotateTrack","toolDrawTrack","rotL","rotR","pieceLabel","trainStyle","cartCount","cartLabel","trainColors","treeTypes","animalTypes","terrainTypes","speedScale","speedLabel","pauseBtn","clearTrains","clearTracks","clearTrees","clearAnimals","clearTerrain","saveWorld","loadWorld","loadWorldFile","resetAll","boardSize","applyBoard","status","hTracks","hBlocks","hTrees","hAnimals","hTrains","hMode","lockWrap","lockLabel"]
           .forEach((id) => this.el[id] = document.getElementById(id));
         this.state = {board: 30, tool: "track", trackType: "straight", treeType: "pine", animalType: "cow", terrainType: "block", rot: 0, paused: false, style: "classic", carts: 2, color: TRAIN_COLORS[0].hex, speedScale: 1};
         this.pointer = {inside: false, ndc: new THREE.Vector2(), leftDown: null, rightDown: null};
@@ -279,6 +302,9 @@
         this.lastFrame = performance.now();
         this.rightViewActive = false;
         this.keyViewActive = false;
+        this.drawSession = null;
+        this.drawCameraState = null;
+        this.drawEdgePan = {x: 0, y: 0, clientX: 0, clientY: 0};
         this.nextTrackId = 1;
         this.nextTrainId = 1;
         this.nextAnimalId = 1;
@@ -414,9 +440,11 @@
           this.camera.aspect = innerWidth / innerHeight;
           this.camera.updateProjectionMatrix();
           this.renderer.setSize(innerWidth, innerHeight);
+          this._syncPanelButton();
         });
         this.el.view.addEventListener("pointerenter", () => this.pointer.inside = true);
         this.el.view.addEventListener("pointerleave", () => {
+          if(this.drawSession) this._finishTrackDraw();
           this.pointer.inside = false;
           this.pointer.leftDown = null;
           this.pointer.rightDown = null;
@@ -427,7 +455,7 @@
         this.el.view.addEventListener("pointerdown", (e) => this._onPointerDown(e));
         this.el.view.addEventListener("pointermove", (e) => this._onPointerMove(e));
         this.el.view.addEventListener("pointerup", (e) => this._onPointerUp(e));
-        this.el.view.addEventListener("pointercancel", () => this._cancelPointer());
+        this.el.view.addEventListener("pointercancel", (e) => this._cancelPointer(e));
         this.el.view.addEventListener("wheel", (e) => this._onWheelZoom(e), {passive: false});
         addEventListener("keydown", (e) => this._onKey(e));
         addEventListener("keyup", (e) => this._onKeyUp(e));
@@ -441,6 +469,7 @@
         this.el.mobileRotL.onclick = () => this._rotate(-1);
         this.el.mobileRotR.onclick = () => this._rotate(1);
         this.el.mobileRotateTrack.onclick = () => this._setTool("rotateTrack");
+        this.el.mobileDrawTrack.onclick = () => this._setTool("drawTrack");
         this.el.mobileView.onclick = () => this._setTool("view");
         this.el.mobileErase.onclick = () => this._setTool("erase");
         this.el.toolTrack.onclick = () => this._setTool("track");
@@ -451,6 +480,14 @@
         this.el.toolErase.onclick = () => this._setTool("erase");
         this.el.toolView.onclick = () => this._setTool("view");
         this.el.toolRotateTrack.onclick = () => this._setTool("rotateTrack");
+        this.el.toolDrawTrack.onclick = () => this._setTool("drawTrack");
+        this.el.drawZoomIn.onclick = () => this._zoomDrawCamera(0.78);
+        this.el.drawZoomOut.onclick = () => this._zoomDrawCamera(1.28);
+        this.el.drawPanUp.onclick = () => this._panDrawCamera(0, -TILE * 2.2);
+        this.el.drawPanDown.onclick = () => this._panDrawCamera(0, TILE * 2.2);
+        this.el.drawPanLeft.onclick = () => this._panDrawCamera(-TILE * 2.2, 0);
+        this.el.drawPanRight.onclick = () => this._panDrawCamera(TILE * 2.2, 0);
+        this.el.drawDone.onclick = () => this._setTool("track");
         this.el.rotL.onclick = () => this._rotate(-1);
         this.el.rotR.onclick = () => this._rotate(1);
         document.querySelectorAll("#trackPieces button[data-piece]").forEach((b) => {
@@ -560,7 +597,8 @@
         const mobile = matchMedia("(max-width: 700px)").matches || (matchMedia("(max-width: 900px)").matches && matchMedia("(orientation: landscape)").matches);
         this.el.collapse.textContent = collapsed ? (mobile ? "Open controls" : "Show") : (mobile ? "Minimize" : "Hide");
       }
-      _cancelPointer(){
+      _cancelPointer(e){
+        if(this.drawSession && (!e || e.pointerId === this.drawSession.pointerId)) this._finishTrackDraw();
         this.pointer.leftDown = null;
         this.pointer.rightDown = null;
         this._setRightView(false);
@@ -569,6 +607,12 @@
         this.pointer.inside = true;
         this._setNdc(e.clientX, e.clientY);
         this._refreshHover();
+        if(this.state.tool === "drawTrack"){
+          if(e.button !== 0) return;
+          e.preventDefault();
+          this._startTrackDraw(e);
+          return;
+        }
         if(e.button === 2){
           if(this.state.tool !== "view"){
             this.pointer.rightDown = {x: e.clientX, y: e.clientY, moved: false};
@@ -582,6 +626,15 @@
       }
       _onPointerMove(e){
         this._setNdc(e.clientX, e.clientY);
+        if(this.drawSession && e.pointerId === this.drawSession.pointerId){
+          e.preventDefault();
+          this.drawEdgePan.clientX = e.clientX;
+          this.drawEdgePan.clientY = e.clientY;
+          this._setDrawEdgePan(e.clientX, e.clientY);
+          this._refreshHover();
+          this._extendTrackDrawTo(this._pickCell());
+          return;
+        }
         if(this.pointer.leftDown){
           const moveLimit = this.pointer.leftDown.pointerType === "touch" ? 12 : 3;
           if(Math.hypot(e.clientX - this.pointer.leftDown.x, e.clientY - this.pointer.leftDown.y) > moveLimit) this.pointer.leftDown.moved = true;
@@ -591,6 +644,14 @@
       }
       _onPointerUp(e){
         this._setNdc(e.clientX, e.clientY);
+        if(this.drawSession && e.pointerId === this.drawSession.pointerId){
+          e.preventDefault();
+          this._refreshHover();
+          this._extendTrackDrawTo(this._pickCell());
+          this._finishTrackDraw();
+          if(this.el.view.hasPointerCapture && this.el.view.hasPointerCapture(e.pointerId)) this.el.view.releasePointerCapture(e.pointerId);
+          return;
+        }
         if(e.button === 2){
           if(this.pointer.rightDown){
             this._setRightView(false);
@@ -622,6 +683,7 @@
       }
       _onKey(e){
         const k = e.key.toLowerCase();
+        if(this.state.tool === "drawTrack" && k === "v") return;
         if(k === "v"){
           this._setKeyView(true);
           return;
@@ -647,7 +709,8 @@
         if(k === "4"){ this._setTool("animal"); return; }
         if(k === "5"){ this._setTool("block"); return; }
         if(k === "6"){ this._setTool("erase"); return; }
-        if(k === "7"){ this._setTool("view"); }
+        if(k === "7"){ this._setTool("view"); return; }
+        if(k === "8"){ this._setTool("drawTrack"); }
       }
       _onKeyUp(e){
         const k = e.key.toLowerCase();
@@ -667,6 +730,232 @@
         if(key === "arrowright") d.copy(r).multiplyScalar(amount);
         this.camera.position.add(d);
         this.controls.target.add(d);
+      }
+      _enterDrawView(){
+        this.drawCameraState = {
+          position: this.camera.position.clone(),
+          target: this.controls.target.clone(),
+          up: this.camera.up.clone()
+        };
+        const target = this.controls.target.clone();
+        target.y = 0;
+        const height = THREE.MathUtils.clamp(this.boardWorld * 0.72, 34, 180);
+        this.camera.up.set(0, 0, -1);
+        this.camera.position.set(target.x, height, target.z);
+        this.controls.target.copy(target);
+        this.camera.lookAt(target);
+        this.controls.update();
+      }
+      _exitDrawView(){
+        if(!this.drawCameraState) return;
+        this.camera.up.copy(this.drawCameraState.up);
+        this.camera.position.copy(this.drawCameraState.position);
+        this.controls.target.copy(this.drawCameraState.target);
+        this.camera.lookAt(this.controls.target);
+        this.controls.update();
+        this.drawCameraState = null;
+        this.drawEdgePan.x = 0;
+        this.drawEdgePan.y = 0;
+      }
+      _panDrawCamera(dx, dz){
+        if(this.state.tool !== "drawTrack" && !this.drawCameraState) return;
+        const limit = Math.max(TILE, this.boardWorld * 0.5 - TILE);
+        const oldX = this.controls.target.x;
+        const oldZ = this.controls.target.z;
+        const nextX = THREE.MathUtils.clamp(oldX + dx, -limit, limit);
+        const nextZ = THREE.MathUtils.clamp(oldZ + dz, -limit, limit);
+        const movedX = nextX - oldX;
+        const movedZ = nextZ - oldZ;
+        this.controls.target.x = nextX;
+        this.controls.target.z = nextZ;
+        this.camera.position.x += movedX;
+        this.camera.position.z += movedZ;
+        this.controls.update();
+      }
+      _zoomDrawCamera(factor){
+        if(this.state.tool !== "drawTrack") return;
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const distance = THREE.MathUtils.clamp(offset.length() * factor, 12, Math.max(48, this.boardWorld * 2.2));
+        offset.setLength(distance);
+        this.camera.position.copy(this.controls.target).add(offset);
+        this.controls.update();
+      }
+      _startTrackDraw(e){
+        const cell = this._pickCell();
+        if(!cell){ this._msg("Start drawing over the grid"); return; }
+        const realTrack = this.tracks.get(keyOf(cell.x, cell.z));
+        if(!realTrack && (this._trackAt(cell.x, cell.z) || this._treeAt(cell.x, cell.z) || this._pondAt(cell.x, cell.z) || this._animalAtCell(cell.x, cell.z) || this.mountainCellIndex.has(keyOf(cell.x, cell.z)))){
+          this._msg("Start on an empty tile or editable track");
+          return;
+        }
+        this.drawSession = {
+          pointerId: e.pointerId,
+          cells: [{x: cell.x, z: cell.z}],
+          created: new Set(),
+          baseHeight: this._tileHeight(cell.x, cell.z),
+          stopped: false
+        };
+        this.drawEdgePan.clientX = e.clientX;
+        this.drawEdgePan.clientY = e.clientY;
+        this._setDrawEdgePan(e.clientX, e.clientY);
+        if(this.el.view.setPointerCapture) this.el.view.setPointerCapture(e.pointerId);
+        this._hideGhosts();
+      }
+      _drawDirection(a, b){
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        if(dx === 1 && dz === 0) return "E";
+        if(dx === -1 && dz === 0) return "W";
+        if(dx === 0 && dz === 1) return "S";
+        if(dx === 0 && dz === -1) return "N";
+        return null;
+      }
+      _extendTrackDrawTo(target){
+        const session = this.drawSession;
+        if(!session || session.stopped || !target) return;
+        const last = session.cells[session.cells.length - 1];
+        if(last.x === target.x && last.z === target.z) return;
+        let x = last.x;
+        let z = last.z;
+        const dx = target.x - x;
+        const dz = target.z - z;
+        let primary = Math.abs(dx) >= Math.abs(dz) ? "x" : "z";
+        if(session.cells.length > 1){
+          const before = session.cells[session.cells.length - 2];
+          const priorDir = this._drawDirection(before, last);
+          if((priorDir === "E" || priorDir === "W") && dx !== 0) primary = "x";
+          if((priorDir === "N" || priorDir === "S") && dz !== 0) primary = "z";
+        }
+        const walkAxis = (axis) => {
+          const goal = axis === "x" ? target.x : target.z;
+          while((axis === "x" ? x : z) !== goal && !session.stopped){
+            if(axis === "x") x += Math.sign(goal - x);
+            else z += Math.sign(goal - z);
+            this._appendDrawCell({x, z});
+          }
+        };
+        walkAxis(primary);
+        walkAxis(primary === "x" ? "z" : "x");
+      }
+      _appendDrawCell(cell){
+        const session = this.drawSession;
+        if(!session || session.stopped) return;
+        if(session.cells.some((c) => c.x === cell.x && c.z === cell.z)) return;
+        const previous = session.cells[session.cells.length - 1];
+        const dir = this._drawDirection(previous, cell);
+        if(!dir) return;
+        const previousTrack = this.tracks.get(keyOf(previous.x, previous.z));
+        if(previousTrack && !session.created.has(keyOf(previous.x, previous.z)) && !previousTrack.connectors.has(dir)){
+          session.stopped = true;
+          this._msg("Drawing stopped: rotate the existing track toward the path");
+          return;
+        }
+        const k = keyOf(cell.x, cell.z);
+        const realTrack = this.tracks.get(k);
+        if(realTrack){
+          if(!realTrack.connectors.has(OPP[dir])){
+            session.stopped = true;
+            this._msg("Drawing stopped: existing track faces another direction");
+            return;
+          }
+          session.cells.push({x: cell.x, z: cell.z});
+          this._renderTrackDraw();
+          session.stopped = true;
+          this._msg("Connected to existing track");
+          return;
+        }
+        if(this._trackAt(cell.x, cell.z) || this._treeAt(cell.x, cell.z) || this._pondAt(cell.x, cell.z) || this._animalAtCell(cell.x, cell.z) || this.mountainCellIndex.has(k)){
+          session.stopped = true;
+          this._msg("Drawing stopped by an occupied tile");
+          return;
+        }
+        if(this._tileHeight(cell.x, cell.z) !== session.baseHeight){
+          session.stopped = true;
+          this._msg("Drawing stopped at an elevation change");
+          return;
+        }
+        session.cells.push({x: cell.x, z: cell.z});
+        this._renderTrackDraw();
+      }
+      _drawShapeForDirs(dirs){
+        if(!dirs.length) return {type: "straight", rot: this.state.rot};
+        for(const type of ["straight", "curve_l"]){
+          for(const rot of [0, 90, 180, 270]){
+            const connectors = connectorsFor(type, rot);
+            if(dirs.length === 1 && connectors.has(dirs[0])) return {type, rot};
+            if(dirs.length === 2 && connectors.size === 2 && dirs.every((dir) => connectors.has(dir))) return {type, rot};
+          }
+        }
+        return {type: "straight", rot: this.state.rot};
+      }
+      _setDrawnTrackShape(track, type, rot){
+        if(track.type === type && track.rot === rot) return;
+        this.trackG.remove(track.mesh);
+        const mesh = this._makeTrackMesh(type, false);
+        const p = this._cellCenter(track.x, track.z);
+        mesh.position.set(p.x, TRACK_Y + track.h * BLOCK_H, p.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(rot);
+        this.trackG.add(mesh);
+        track.type = type;
+        track.rot = rot;
+        track.connectors = connectorsFor(type, rot);
+        track.mesh = mesh;
+      }
+      _renderTrackDraw(){
+        const session = this.drawSession;
+        if(!session) return;
+        for(let i = 0; i < session.cells.length; i++){
+          const cell = session.cells[i];
+          const k = keyOf(cell.x, cell.z);
+          const existing = this.tracks.get(k);
+          if(existing && !session.created.has(k)) continue;
+          const dirs = [];
+          if(i > 0){
+            const dir = this._drawDirection(cell, session.cells[i - 1]);
+            if(dir) dirs.push(dir);
+          }
+          if(i < session.cells.length - 1){
+            const dir = this._drawDirection(cell, session.cells[i + 1]);
+            if(dir) dirs.push(dir);
+          }
+          const shape = this._drawShapeForDirs(dirs);
+          if(!existing){
+            this._placeTrack(cell.x, cell.z, shape.type, shape.rot);
+            if(this.tracks.has(k)) session.created.add(k);
+          }else{
+            this._setDrawnTrackShape(existing, shape.type, shape.rot);
+          }
+        }
+      }
+      _finishTrackDraw(){
+        const session = this.drawSession;
+        if(!session) return;
+        this._renderTrackDraw();
+        const count = session.created.size;
+        const curveCount = [...session.created].filter((k) => this.tracks.get(k)?.type === "curve_l").length;
+        this.drawSession = null;
+        this.drawEdgePan.x = 0;
+        this.drawEdgePan.y = 0;
+        this._updateHud();
+        if(count) this._msg(`Drew ${count} track piece${count === 1 ? "" : "s"}${curveCount ? ` with ${curveCount} curve${curveCount === 1 ? "" : "s"}` : ""}`);
+        else if(!session.stopped) this._msg("No new track drawn");
+      }
+      _setDrawEdgePan(clientX, clientY){
+        const rect = this.el.view.getBoundingClientRect();
+        const margin = Math.min(72, Math.max(42, Math.min(rect.width, rect.height) * 0.13));
+        const left = (rect.left + margin - clientX) / margin;
+        const right = (clientX - (rect.right - margin)) / margin;
+        const top = (rect.top + margin - clientY) / margin;
+        const bottom = (clientY - (rect.bottom - margin)) / margin;
+        this.drawEdgePan.x = THREE.MathUtils.clamp(right > 0 ? right : (left > 0 ? -left : 0), -1, 1);
+        this.drawEdgePan.y = THREE.MathUtils.clamp(bottom > 0 ? bottom : (top > 0 ? -top : 0), -1, 1);
+      }
+      _updateDrawAutoPan(dt){
+        if(!this.drawSession || (!this.drawEdgePan.x && !this.drawEdgePan.y)) return;
+        const speed = TILE * 2.4;
+        this._panDrawCamera(this.drawEdgePan.x * speed * dt, this.drawEdgePan.y * speed * dt);
+        this._setNdc(this.drawEdgePan.clientX, this.drawEdgePan.clientY);
+        this._extendTrackDrawTo(this._pickCell());
       }
       _setNdc(cx, cy){
         const r = this.el.view.getBoundingClientRect();
@@ -690,7 +979,14 @@
         this.controls.enabled = (this.state.tool === "view") || this.rightViewActive || this.keyViewActive;
       }
       _setTool(tool){
+        const previousTool = this.state.tool;
+        if(previousTool === "drawTrack" && tool !== "drawTrack"){
+          if(this.drawSession) this._finishTrackDraw();
+          this._exitDrawView();
+        }
         this.state.tool = tool;
+        if(tool === "drawTrack" && previousTool !== "drawTrack") this._enterDrawView();
+        document.getElementById("app").classList.toggle("draw-mode", tool === "drawTrack");
         this.el.toolTrack.classList.toggle("active", tool === "track");
         this.el.toolTrain.classList.toggle("active", tool === "train");
         this.el.toolTree.classList.toggle("active", tool === "tree");
@@ -699,8 +995,10 @@
         this.el.toolErase.classList.toggle("active", tool === "erase");
         this.el.toolView.classList.toggle("active", tool === "view");
         this.el.toolRotateTrack.classList.toggle("active", tool === "rotateTrack");
+        this.el.toolDrawTrack.classList.toggle("active", tool === "drawTrack");
         this.el.mobileTrack.classList.toggle("active", tool === "track");
         this.el.mobileRotateTrack.classList.toggle("active", tool === "rotateTrack");
+        this.el.mobileDrawTrack.classList.toggle("active", tool === "drawTrack");
         this.el.mobileView.classList.toggle("active", tool === "view");
         this.el.mobileErase.classList.toggle("active", tool === "erase");
         this._syncControlsEnabled();
@@ -708,6 +1006,13 @@
         this._refreshHover();
         this._updateHud();
         if(tool === "rotateTrack") this._msg("Tap a placed track to rotate it");
+        if(tool === "drawTrack"){
+          if(matchMedia("(max-width: 900px)").matches){
+            this.el.panel.classList.add("collapsed");
+            this._syncPanelButton();
+          }
+          this._msg("Drag on the grid to draw track", 2200);
+        }
       }
       _rotate(d){
         this.state.rot = (this.state.rot + d * 90 + 360) % 360;
@@ -716,6 +1021,10 @@
         this._refreshHover();
       }
       _updatePieceLabel(){
+        if(this.state.tool === "drawTrack"){
+          this.el.pieceLabel.textContent = "Draw Track: drag a path; turns become curves automatically";
+          return;
+        }
         if(this.state.tool === "block"){
           const names = {block: "Block", slope: "Slope Block", arch: "Arch", pond: "Pond", mountain: "Canyon 3x3"};
           this.el.pieceLabel.textContent = `Terrain: ${names[this.state.terrainType] || "Block"} | Rotation: ${this.state.rot} deg`;
@@ -2658,7 +2967,7 @@
         this.el.hTrees.textContent = `Trees: ${this.trees.size}`;
         this.el.hAnimals.textContent = `Animals: ${this.animals.length}`;
         this.el.hTrains.textContent = `Trains: ${this.trains.length}`;
-        const modeName = this.state.tool === "track" ? "Place Track" : (this.state.tool === "tree" ? "Place Trees" : (this.state.tool === "animal" ? "Place Animals" : (this.state.tool === "block" ? "Place Terrain" : (this.state.tool === "train" ? "Place Train" : (this.state.tool === "erase" ? "Erase" : (this.state.tool === "rotateTrack" ? "Rotate Track" : "View"))))));
+        const modeName = this.state.tool === "track" ? "Place Track" : (this.state.tool === "tree" ? "Place Trees" : (this.state.tool === "animal" ? "Place Animals" : (this.state.tool === "block" ? "Place Terrain" : (this.state.tool === "train" ? "Place Train" : (this.state.tool === "erase" ? "Erase" : (this.state.tool === "rotateTrack" ? "Rotate Track" : (this.state.tool === "drawTrack" ? "Draw Track" : "View")))))));
         this.el.hMode.textContent = `Mode: ${modeName}`;
       }
       _loop(){
@@ -2667,6 +2976,7 @@
         const dt = Math.min(0.05, (now - this.lastFrame) / 1000);
         this.lastFrame = now;
         this.controls.update();
+        this._updateDrawAutoPan(dt);
         if(!this.state.paused){
           this._updateTrains(dt);
           this._updateAnimals(dt);
